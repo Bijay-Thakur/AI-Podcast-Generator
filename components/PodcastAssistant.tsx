@@ -7,7 +7,11 @@ import { StarterPack } from "./StarterPack";
 import { PodcastGenerator } from "./PodcastGenerator";
 import { Mic2, FileText, Sparkles, Rocket, Radio } from "lucide-react";
 
-export function PodcastAssistant() {
+interface PodcastAssistantProps {
+  onTherapistNavigate?: () => void;
+}
+
+export function PodcastAssistant({ onTherapistNavigate }: PodcastAssistantProps) {
   const [activeTab, setActiveTab] = useState("topic");
   const [selectedTopic, setSelectedTopic] = useState("");
   const [script, setScript] = useState("");
@@ -129,6 +133,7 @@ export function PodcastAssistant() {
               selectedTopic={selectedTopic}
               setSelectedTopic={setSelectedTopic}
               onNext={() => setActiveTab("script")}
+              onOpenTherapist={onTherapistNavigate}
             />
           </TabsContent>
 
@@ -151,15 +156,6 @@ export function PodcastAssistant() {
         </Tabs>
       </motion.div>
       
-      <style>{`
-        @keyframes shimmer {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(100%); }
-        }
-        .animate-shimmer {
-          animation: shimmer 2s infinite;
-        }
-      `}</style>
     </div>
   );
 }

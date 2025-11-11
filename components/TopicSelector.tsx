@@ -12,9 +12,10 @@ interface TopicSelectorProps {
   selectedTopic: string;
   setSelectedTopic: (topic: string) => void;
   onNext: () => void;
+  onOpenTherapist?: () => void;
 }
 
-export function TopicSelector({ selectedTopic, setSelectedTopic, onNext }: TopicSelectorProps) {
+export function TopicSelector({ selectedTopic, setSelectedTopic, onNext, onOpenTherapist }: TopicSelectorProps) {
   const [topicMode, setTopicMode] = useState<"preset" | "custom">("preset");
   const [customTopic, setCustomTopic] = useState("");
 
@@ -145,6 +146,39 @@ export function TopicSelector({ selectedTopic, setSelectedTopic, onNext }: Topic
                 )}
               </div>
             </RadioGroup>
+            {onOpenTherapist && (
+              <motion.button
+                type="button"
+                onClick={onOpenTherapist}
+                whileHover={{ scale: 1.01, y: -2 }}
+                whileTap={{ scale: 0.99 }}
+                className="mt-5 w-full flex flex-col md:flex-row items-start md:items-center gap-4 p-5 rounded-2xl border-2 border-fuchsia-400/40 bg-gradient-to-r from-fuchsia-600/40 via-purple-600/40 to-cyan-500/40 shadow-[0_20px_60px_-15px_rgba(195,65,255,0.6)] backdrop-blur-xl transition-all duration-500"
+              >
+                <div className="flex-1">
+                  <p className="text-white text-lg font-semibold flex items-center gap-2">
+                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/20">
+                      <Zap className="w-4 h-4 text-white" />
+                    </span>
+                    Talk with a therapist
+                  </p>
+                  <p className="text-sm text-white/80 mt-1">
+                    Feeling overwhelmed? Connect with a certified wellness guide for a calming chat or a focused call.
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="px-4 py-2 rounded-full bg-white/20 text-white text-sm font-medium tracking-wide">
+                    Chat or Call
+                  </div>
+                  <motion.div
+                    animate={{ x: [0, 6, 0] }}
+                    transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+                    className="flex items-center justify-center h-12 w-12 rounded-full bg-white/30 text-purple-900"
+                  >
+                    <ArrowRight className="w-5 h-5" />
+                  </motion.div>
+                </div>
+              </motion.button>
+            )}
           </div>
 
           {/* Preset Topics */}
