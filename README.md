@@ -53,25 +53,92 @@
    ```
 
 3. **Set up environment variables**
-   ```bash
-   # Copy the example environment file
-   cp .env.example .env
    
-   # Edit .env and add your API keys
-   # NEVER commit your .env file to version control!
+   Create a `.env` file in the root directory with server-side variables:
+   ```bash
+   # Create .env file
+   touch .env
    ```
+   
+   Add your API keys (see [API Keys section](#-api-keys--environment-variables) above):
+   ```env
+   GEMINI_API_KEY=your_key_here
+   OPENAI_API_KEY=your_key_here
+   ELEVENLABS_API_KEY=your_key_here
+   ELEVENLABS_VOICE_MALE=your_voice_id
+   ELEVENLABS_VOICE_FEMALE=your_voice_id
+   ```
+   
+   > ⚠️ **Important**: Never commit your `.env` file to version control!
 
 4. **Start the development server**
+   
+   **Option A: Run everything together (Recommended)**
+   ```bash
+   npm run dev:full
+   ```
+   This starts:
+   - Backend API server on `http://localhost:3000`
+   - Frontend dev server on `http://localhost:5173`
+   - API keys are protected on the backend
+   
+   **Option B: Run separately (if Option A doesn't work)**
+   
+   Terminal 1 (Backend):
+   ```bash
+   npm run dev:local
+   ```
+   
+   Terminal 2 (Frontend):
    ```bash
    npm run dev
    ```
 
 5. **Open your browser**
-   Navigate to `http://localhost:5173` (or the port shown in your terminal)
+   Navigate to `http://localhost:5173` (frontend will proxy API calls to backend)
+   
+   **Verify it's working:**
+   - Visit `http://localhost:3000/api/health` - should show env var status
+   - Try generating a script in the app
 
-## 🔑 API Keys
+## 🔑 API Keys & Environment Variables
 
-VoxGen requires API keys from the following services:
+### ⚠️ Security Update
+
+**All API keys are now stored server-side for security.** The frontend no longer has access to API keys. This prevents keys from being exposed in the browser.
+
+### Local Development Setup
+
+For local development, you need to set up environment variables in **two places**:
+
+#### 1. Backend Environment Variables (Server-side)
+
+Create a `.env` file in the root directory with **server-side** variables (no `VITE_` prefix):
+
+```env
+# Choose ONE: Gemini OR OpenAI (or use both for flexibility)
+GEMINI_API_KEY=your_gemini_api_key_here
+OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_MODEL=gpt-4o-mini  # Optional, defaults to gpt-4o-mini
+
+# ElevenLabs (Required)
+ELEVENLABS_API_KEY=your_elevenlabs_api_key_here
+ELEVENLABS_VOICE_MALE=your_male_voice_id_here
+ELEVENLABS_VOICE_FEMALE=your_female_voice_id_here
+```
+
+> ⚠️ **Important**: These are server-side variables. They are **never** sent to the browser.
+
+#### 2. Frontend Environment Variables (Optional)
+
+Only needed if your backend is on a different domain:
+
+```env
+# Optional: Only if backend is on different domain
+VITE_BACKEND_BASE_URL=https://your-backend-domain.com
+```
+
+If not set, the frontend will use relative `/api` routes (recommended for Vercel).
 
 ### Required API Keys
 
@@ -84,22 +151,6 @@ VoxGen requires API keys from the following services:
    - Get your API key from [ElevenLabs Dashboard](https://elevenlabs.io/app/settings/api-keys)
    - Get voice IDs from [ElevenLabs Voices](https://elevenlabs.io/app/voices)
    - Used for text-to-speech audio generation
-
-### Environment Variables
-
-Create a `.env` file in the root directory with the following variables:
-
-```env
-# Choose ONE: Gemini OR OpenAI (or use both for flexibility)
-VITE_GEMINI_API_KEY=your_gemini_api_key_here
-VITE_OPENAI_API_KEY=your_openai_api_key_here
-VITE_OPENAI_MODEL=gpt-4o-mini  # Optional, defaults to gpt-4o-mini
-
-# ElevenLabs (Required)
-VITE_ELEVENLABS_API_KEY=your_elevenlabs_api_key_here
-VITE_ELEVENLABS_VOICE_MALE=your_male_voice_id_here
-VITE_ELEVENLABS_VOICE_FEMALE=your_female_voice_id_here
-```
 
 > ⚠️ **Important**: Never commit your `.env` file to version control! It's already included in `.gitignore`.
 
@@ -159,6 +210,12 @@ VITE_ELEVENLABS_VOICE_FEMALE=your_female_voice_id_here
 
 ```
 voxgen-ai-podcast-studio/
+├── api/                 # Backend API routes (Vercel serverless functions)
+│   ├── health.ts       # Health check endpoint
+│   ├── generate-script.ts  # Script generation
+│   ├── refine-script.ts     # Script refinement
+│   ├── generate-voice.ts    # Voice synthesis
+│   └── get-voice-ids.ts     # Voice ID retrieval
 ├── components/          # React components
 │   ├── ui/             # Reusable UI components (Shadcn)
 │   ├── PodcastAssistant.tsx
@@ -167,10 +224,12 @@ voxgen-ai-podcast-studio/
 │   ├── TopicSelector.tsx
 │   └── WritingAnimation.tsx
 ├── lib/                # Core utilities
-│   ├── podcast-api.ts  # API integrations
+│   ├── backendApi.ts   # Backend API client (frontend)
+│   ├── podcast-api.ts  # High-level API functions
 │   └── utils.ts        # Helper functions
 ├── styles/             # Global styles
-├── .env.example        # Environment variables template
+├── vercel.json         # Vercel configuration
+├── .env                # Environment variables (server-side, not committed)
 ├── .gitignore          # Git ignore rules
 ├── package.json        # Dependencies
 └── vite.config.ts      # Vite configuration
@@ -198,10 +257,13 @@ voxgen-ai-podcast-studio/
 
 ## 🔒 Security & Privacy
 
-- **API Keys**: Stored locally in `.env` file (never committed to Git)
-- **No Backend**: All processing happens client-side
+- **API Keys**: Stored server-side in environment variables (never exposed to browser)
+- **Backend API**: All AI API calls go through secure serverless functions
 - **Privacy-First**: Your scripts and audio are processed but not stored on external servers (except API calls)
 - **Session Storage**: Timing data stored only in browser session
+- **Input Validation**: All requests are validated server-side
+- **Rate Limiting**: Basic rate limiting on API endpoints
+- **Error Handling**: Safe error messages without exposing secrets
 
 ## 🚀 Building for Production
 
@@ -214,6 +276,63 @@ npm run preview
 ```
 
 The production build will be in the `dist/` directory.
+
+## 📦 Deployment to Vercel
+
+### Step 1: Deploy to Vercel
+
+1. **Install Vercel CLI** (if not already installed):
+   ```bash
+   npm i -g vercel
+   ```
+
+2. **Deploy the project**:
+   ```bash
+   vercel
+   ```
+   
+   Or connect your GitHub repo to Vercel for automatic deployments.
+
+### Step 2: Set Environment Variables on Vercel
+
+Go to your Vercel project dashboard → Settings → Environment Variables and add:
+
+**Required Server-Side Variables** (these are used by API routes):
+- `GEMINI_API_KEY` = your_gemini_api_key
+- `OPENAI_API_KEY` = your_openai_api_key (optional if using Gemini)
+- `OPENAI_MODEL` = gpt-4o-mini (optional, defaults to gpt-4o-mini)
+- `ELEVENLABS_API_KEY` = your_elevenlabs_api_key
+- `ELEVENLABS_VOICE_MALE` = your_male_voice_id
+- `ELEVENLABS_VOICE_FEMALE` = your_female_voice_id
+
+**Important Notes**:
+- ✅ Set these for **Production**, **Preview**, and **Development** environments
+- ❌ **DO NOT** set any `VITE_*` variables (they're no longer needed)
+- 🔒 These variables are **never** exposed to the browser
+
+### Step 3: Verify Deployment
+
+1. Visit your deployed site
+2. Check `/api/health` endpoint to verify environment variables are set
+3. Test script generation
+4. Test audio generation
+
+### Local Testing with Vercel Dev
+
+To test serverless functions locally:
+
+```bash
+# Install Vercel CLI if not already installed
+npm i -g vercel
+
+# Run Vercel dev (uses your .env file)
+vercel dev
+```
+
+This will:
+- Start the frontend dev server
+- Run API routes locally
+- Use environment variables from `.env` file
 
 ## 📝 Scripts
 
@@ -243,6 +362,28 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - [Shadcn UI](https://ui.shadcn.com/) for beautiful component designs
 - [Vite](https://vitejs.dev/) for the amazing development experience
 
+## 🧪 Testing Checklist
+
+After deployment, verify these features work:
+
+- [ ] **Health Check**: Visit `/api/health` - should show env var status
+- [ ] **Script Generation**: Generate a script with Gemini or OpenAI
+- [ ] **Script Refinement**: Refine an existing script
+- [ ] **Voice Synthesis**: Generate audio with male voice
+- [ ] **Voice Synthesis**: Generate audio with female voice
+- [ ] **Error Handling**: Test with invalid input (should show user-friendly error)
+- [ ] **Mobile Browser**: Test on mobile device - audio playback should work
+
+## 🔄 Rollback Plan
+
+If something breaks after deployment:
+
+1. **Quick Rollback**: In Vercel dashboard, go to Deployments → Previous deployment → Promote to Production
+2. **Check Environment Variables**: Verify all server-side env vars are set correctly
+3. **Check API Routes**: Visit `/api/health` to verify backend is working
+4. **Check Browser Console**: Look for CORS or network errors
+5. **Local Testing**: Run `vercel dev` locally to test with same env vars
+
 ## 💬 Support
 
 If you encounter any issues or have questions:
@@ -250,6 +391,7 @@ If you encounter any issues or have questions:
 1. Check the [Issues](https://github.com/yourusername/voxgen-ai-podcast-studio/issues) page
 2. Create a new issue if your problem isn't already addressed
 3. Include relevant details (error messages, steps to reproduce, etc.)
+4. Check `/api/health` endpoint to verify backend configuration
 
 ---
 

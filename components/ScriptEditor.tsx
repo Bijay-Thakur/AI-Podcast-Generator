@@ -9,7 +9,7 @@ import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { FileText, Wand2, ArrowRight, CheckCircle2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import { generateScript, refineScript, getVoiceId } from "../lib/podcast-api";
+import { generateScript, refineScript } from "../lib/podcast-api";
 import { WritingAnimation } from "./WritingAnimation";
 
 interface ScriptEditorProps {
@@ -54,7 +54,14 @@ export function ScriptEditor({ script, setScript, topic, onNext }: ScriptEditorP
       
       toast.success("Script generated successfully!");
     } catch (error: any) {
-      toast.error(error.message || "Failed to generate script. Please check your API keys.");
+      const errorMessage = error.message || "Failed to generate script. Please check your API keys.";
+      
+      // Handle rate limit errors specifically
+      if (error.code === 'RATE_LIMIT_EXCEEDED' || errorMessage.includes('Rate limit')) {
+        toast.error("Rate limit exceeded. Please wait a moment before trying again. You may have exceeded your API quota.");
+      } else {
+        toast.error(errorMessage);
+      }
       console.error("Script generation error:", error);
     } finally {
       setIsGenerating(false);
@@ -74,7 +81,13 @@ export function ScriptEditor({ script, setScript, topic, onNext }: ScriptEditorP
       setScript(refinedScript);
       toast.success("Script refined successfully!");
     } catch (error: any) {
-      toast.error(error.message || "Failed to refine script. Please check your API keys.");
+      const errorMessage = error.message || "Failed to refine script. Please check your API keys.";
+      
+      if (error.code === 'RATE_LIMIT_EXCEEDED' || errorMessage.includes('Rate limit')) {
+        toast.error("Rate limit exceeded. Please wait a moment before trying again.");
+      } else {
+        toast.error(errorMessage);
+      }
       console.error("Script refinement error:", error);
     } finally {
       setIsRefining(false);
@@ -89,9 +102,8 @@ export function ScriptEditor({ script, setScript, topic, onNext }: ScriptEditorP
     onNext();
   };
 
-  // Check if we have voice IDs
-  const person1VoiceId = getVoiceId(person1Gender);
-  const person2VoiceId = getVoiceId(person2Gender);
+  // Voice IDs are now fetched from backend - we'll check them when generating audio
+  // For now, we just need to store the gender preferences
 
   return (
     <motion.div 
@@ -191,11 +203,6 @@ export function ScriptEditor({ script, setScript, topic, onNext }: ScriptEditorP
                         <SelectItem value="female">Female</SelectItem>
                       </SelectContent>
                     </Select>
-                    {!person1VoiceId && (
-                      <p className="text-xs text-yellow-400 mt-1">
-                        Voice ID not set in environment variables
-                      </p>
-                    )}
                   </div>
                   <div>
                     <Label htmlFor="person2" className="text-purple-200 mb-2 block">
@@ -217,11 +224,6 @@ export function ScriptEditor({ script, setScript, topic, onNext }: ScriptEditorP
                         <SelectItem value="female">Female</SelectItem>
                       </SelectContent>
                     </Select>
-                    {!person2VoiceId && (
-                      <p className="text-xs text-yellow-400 mt-1">
-                        Voice ID not set in environment variables
-                      </p>
-                    )}
                     <p className="text-xs text-purple-300/70 mt-2">
                       {person1Gender === "male" ? "Female" : "Male"} (opposite of Host)
                     </p>

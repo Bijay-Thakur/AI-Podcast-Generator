@@ -2,10 +2,10 @@ import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
-import { Progress } from "./ui/progress";
 import { Mic2, Play, Pause, Loader2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { generatePodcastAudio, getVoiceId } from "../lib/podcast-api";
+import { CircularProgress } from "./ui/circular-progress";
 
 interface PodcastGeneratorProps {
   script: string;
@@ -181,13 +181,14 @@ export function PodcastGenerator({ script, topic, onAudioGenerated }: PodcastGen
   const lastSpeakerRef = useRef<1 | 2 | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [generationProgress, setGenerationProgress] = useState(0);
+  const [generationStatus, setGenerationStatus] = useState<{ current: number; total: number } | null>(null);
 
   // Get voice genders from localStorage (set by ScriptEditor)
   const person1Gender = (localStorage.getItem("podcast_voice_person1") || "male") as "male" | "female";
   const person2Gender = (localStorage.getItem("podcast_voice_person2") || "female") as "male" | "female";
 
-  const person1VoiceId = getVoiceId(person1Gender);
-  const person2VoiceId = getVoiceId(person2Gender);
+  // Voice IDs will be fetched from backend when generating audio
 
   useEffect(() => {
     // Cleanup audio URL on unmount
@@ -390,11 +391,6 @@ export function PodcastGenerator({ script, topic, onAudioGenerated }: PodcastGen
       return;
     }
 
-    if (!person1VoiceId || !person2VoiceId) {
-      toast.error("Voice IDs not configured. Please check your environment variables.");
-      return;
-    }
-
     setIsGenerating(true);
     setIsGenerated(false);
     setIsPlaying(false);
@@ -404,10 +400,24 @@ export function PodcastGenerator({ script, topic, onAudioGenerated }: PodcastGen
     setDuration(0);
 
     try {
+      // Fetch voice IDs from backend
+      const person1VoiceId = await getVoiceId(person1Gender);
+      const person2VoiceId = await getVoiceId(person2Gender);
+
+      if (!person1VoiceId || !person2VoiceId) {
+        toast.error("Voice IDs not configured. Please check your backend environment variables.");
+        setIsGenerating(false);
+        return;
+      }
+
       const url = await generatePodcastAudio({
         script,
         person1VoiceId,
         person2VoiceId,
+        onProgress: (progress, current, total) => {
+          setGenerationProgress(progress);
+          setGenerationStatus({ current, total });
+        },
       });
       setAudioUrl(url);
       setIsGenerated(true);
@@ -417,10 +427,19 @@ export function PodcastGenerator({ script, topic, onAudioGenerated }: PodcastGen
         onAudioGenerated();
       }
     } catch (error: any) {
-      toast.error(error.message || "Failed to generate audio. Please check your API keys.");
+      const errorMessage = error.message || "Failed to generate audio. Please check your API keys.";
+      
+      // Handle rate limit errors specifically
+      if (error.code === 'RATE_LIMIT_EXCEEDED' || errorMessage.includes('Rate limit')) {
+        toast.error("Rate limit exceeded. Please wait a moment before trying again. You may have exceeded your ElevenLabs quota.");
+      } else {
+        toast.error(errorMessage);
+      }
       console.error("Audio generation error:", error);
     } finally {
       setIsGenerating(false);
+      setGenerationProgress(0);
+      setGenerationStatus(null);
     }
   };
 
@@ -485,39 +504,53 @@ export function PodcastGenerator({ script, topic, onAudioGenerated }: PodcastGen
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.5 }}
             >
-              <motion.div
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-              >
-                <Button
-                  onClick={handleGenerate}
-                  disabled={isGenerating || !script}
-                  className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-purple-500 via-pink-500 to-cyan-500 hover:from-purple-600 hover:via-pink-600 hover:to-cyan-600 text-white border-0 shadow-2xl shadow-purple-500/50 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-all duration-300 relative overflow-hidden group disabled:hover:scale-100"
-                  style={{ willChange: 'transform' }}
+              {isGenerating ? (
+                <motion.div
+                  className="flex flex-col items-center gap-6"
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.3 }}
                 >
-                  {isGenerating ? (
-                    <>
-                      <Loader2 className="w-8 h-8 sm:w-10 sm:h-10 animate-spin relative z-10" />
-                      <motion.div
-                        className="absolute inset-0 bg-gradient-to-r from-cyan-400/30 via-pink-400/30 to-purple-400/30"
-                        animate={{
-                          rotate: 360,
-                        }}
-                        transition={{
-                          duration: 3,
-                          repeat: Infinity,
-                          ease: "linear",
-                        }}
-                      />
-                    </>
-                  ) : (
-                    <Mic2 className="w-8 h-8 sm:w-10 sm:h-10" />
-                  )}
-                </Button>
-              </motion.div>
-              <p className="text-sm text-purple-200 font-medium">
-                {isGenerating ? "Generating..." : "Generate Audio"}
-              </p>
+                  <CircularProgress
+                    value={generationProgress}
+                    size={140}
+                    strokeWidth={10}
+                    label={generationStatus ? `Segment ${generationStatus.current}/${generationStatus.total}` : undefined}
+                  />
+                  <div className="text-center space-y-2">
+                    <p className="text-lg font-semibold text-white">
+                      Generating Audio...
+                    </p>
+                    {generationStatus && (
+                      <p className="text-sm text-purple-200/80">
+                        Processing segment {generationStatus.current} of {generationStatus.total}
+                      </p>
+                    )}
+                    <p className="text-xs text-purple-200/60">
+                      This may take a minute...
+                    </p>
+                  </div>
+                </motion.div>
+              ) : (
+                <>
+                  <motion.div
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    <Button
+                      onClick={handleGenerate}
+                      disabled={isGenerating || !script}
+                      className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-purple-500 via-pink-500 to-cyan-500 hover:from-purple-600 hover:via-pink-600 hover:to-cyan-600 text-white border-0 shadow-2xl shadow-purple-500/50 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-all duration-300 relative overflow-hidden group disabled:hover:scale-100"
+                      style={{ willChange: 'transform' }}
+                    >
+                      <Mic2 className="w-8 h-8 sm:w-10 sm:h-10" />
+                    </Button>
+                  </motion.div>
+                  <p className="text-sm text-purple-200 font-medium">
+                    Generate Audio
+                  </p>
+                </>
+              )}
             </motion.div>
           )}
 

@@ -1,0 +1,262 @@
+// Refine existing podcast script using Gemini or OpenAI
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+
+interface RefineRequest {
+  script: string;
+  provider: 'gemini' | 'chatgpt';
+  instruction?: string;
+}
+
+interface ErrorResponse {
+  error: {
+    message: string;
+    code: string;
+  };
+}
+
+function validateRequest(body: any): body is RefineRequest {
+  return (
+    typeof body === 'object' &&
+    typeof body.script === 'string' &&
+    body.script.trim().length > 0 &&
+    (body.provider === 'gemini' || body.provider === 'chatgpt') &&
+    (body.instruction === undefined || typeof body.instruction === 'string')
+  );
+}
+
+// Helper: Sleep function
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function callGemini(prompt: string): Promise<string> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY is not set');
+  }
+
+  // Add delay before Gemini requests to prevent rate limiting
+  await sleep(1000); // 1 second delay
+
+  const models = ['gemini-1.5-flash', 'gemini-2.0-flash-exp'];
+  
+  for (const model of models) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60000);
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.9,
+              topP: 0.95,
+              topK: 40,
+              maxOutputTokens: 8192,
+            },
+          }),
+          signal: controller.signal,
+        }
+      );
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        let errorText = '';
+        let errorData: any = null;
+        
+        try {
+          errorText = await response.text();
+          errorData = JSON.parse(errorText);
+        } catch {
+          // If parsing fails, use raw text
+        }
+        
+        // Handle rate limiting (429) - Gemini specific
+        if (response.status === 429) {
+          const retryAfter = response.headers.get('retry-after') || '60';
+          const errorMsg = errorData?.error?.message || errorText || 'Rate limit exceeded';
+          throw new Error(`Gemini API rate limit exceeded. Please wait ${retryAfter} seconds. Error: ${errorMsg.substring(0, 100)}`);
+        }
+        
+        // Handle quota exceeded (429 can also mean quota)
+        if (errorData?.error?.message?.toLowerCase().includes('quota') || 
+            errorData?.error?.message?.toLowerCase().includes('billing')) {
+          throw new Error('Gemini API quota exceeded. Please check your billing or upgrade your plan.');
+        }
+        
+        if (model === models[models.length - 1]) {
+          throw new Error(`Gemini API error: ${response.status} - ${(errorData?.error?.message || errorText).substring(0, 200)}`);
+        }
+        continue;
+      }
+
+      const data = await response.json();
+      if (data.error) {
+        // Check for rate limit in error object
+        if (data.error.message?.toLowerCase().includes('rate') || 
+            data.error.message?.toLowerCase().includes('quota') ||
+            data.error.code === 429) {
+          throw new Error(`Gemini API rate limit: ${data.error.message}`);
+        }
+        throw new Error(`Gemini API error: ${data.error.message || JSON.stringify(data.error)}`);
+      }
+      
+      const candidate = data?.candidates?.[0];
+      if (!candidate) {
+        throw new Error('No candidates returned from Gemini API');
+      }
+
+      const parts = candidate.content?.parts || [];
+      const text = parts
+        .map((part: { text?: string }) => part?.text)
+        .filter(Boolean)
+        .join('\n\n');
+
+      if (!text || text.trim().length === 0) {
+        throw new Error('Empty response from Gemini API');
+      }
+
+      return text.trim();
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        throw new Error('Request timeout');
+      }
+      
+      // If it's a rate limit error, don't try next model
+      if (error.message?.includes('rate limit') || 
+          error.message?.includes('quota') || 
+          error.message?.includes('429')) {
+        throw error;
+      }
+      
+      if (model === models[models.length - 1] || !error.message?.includes('404')) {
+        throw error;
+      }
+      continue;
+    }
+  }
+  
+  throw new Error('All Gemini models failed');
+}
+
+async function callOpenAI(prompt: string): Promise<string> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error('OPENAI_API_KEY is not set');
+  }
+
+  const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60000);
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.9,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a professional podcast script writer. Create natural, engaging, and warm conversational scripts.',
+          },
+          { role: 'user', content: prompt },
+        ],
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`OpenAI API error: ${response.status} - ${errorText.substring(0, 200)}`);
+    }
+
+    const data = await response.json();
+    return data?.choices?.[0]?.message?.content?.trim() || '';
+  } catch (error: any) {
+    if (error.name === 'AbortError') {
+      throw new Error('Request timeout');
+    }
+    throw error;
+  }
+}
+
+export default async function handler(
+  request: VercelRequest,
+  response: VercelResponse,
+): Promise<void> {
+  response.setHeader('Access-Control-Allow-Origin', '*');
+  response.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (request.method === 'OPTIONS') {
+    return response.status(200).end();
+  }
+
+  if (request.method !== 'POST') {
+    return response.status(405).json({ error: { message: 'Method not allowed', code: 'METHOD_NOT_ALLOWED' } });
+  }
+
+  const contentLength = request.headers['content-length'];
+  if (contentLength && parseInt(contentLength) > 500000) { // 500KB limit for scripts
+    return response.status(413).json({ error: { message: 'Request too large', code: 'PAYLOAD_TOO_LARGE' } });
+  }
+
+  try {
+    if (!validateRequest(request.body)) {
+      return response.status(400).json({ error: { message: 'Invalid request body', code: 'VALIDATION_ERROR' } });
+    }
+
+    const { script, provider, instruction } = request.body;
+
+    const prompt = instruction
+      ? `${instruction}\n\nCurrent script:\n${script}\n\nPlease refine and improve the script:`
+      : `Please refine and improve this podcast script to make it more natural, engaging, and professional:\n\n${script}`;
+
+    let refinedScript: string;
+    if (provider === 'gemini') {
+      refinedScript = await callGemini(prompt);
+    } else {
+      refinedScript = await callOpenAI(prompt);
+    }
+
+    response.status(200).json({ script: refinedScript });
+  } catch (error: any) {
+    console.error('Script refinement error:', error.message);
+    
+    // Check if it's a rate limit error
+    if (error.message?.includes('Rate limit') || 
+        error.message?.includes('rate limit') ||
+        error.message?.includes('429') ||
+        error.message?.includes('quota')) {
+      const errorResponse: ErrorResponse = {
+        error: {
+          message: error.message || 'Rate limit exceeded. Please wait before trying again.',
+          code: 'RATE_LIMIT_EXCEEDED',
+        },
+      };
+      return response.status(429).json(errorResponse);
+    }
+    
+    const errorResponse: ErrorResponse = {
+      error: {
+        message: error.message || 'Failed to refine script',
+        code: 'REFINEMENT_ERROR',
+      },
+    };
+    response.status(500).json(errorResponse);
+  }
+}
+

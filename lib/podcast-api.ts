@@ -1,11 +1,7 @@
 // API functions for podcast generation
+// NOTE: All API keys are now handled server-side. This file uses the backend API client.
 
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
-const OPENAI_MODEL = import.meta.env.VITE_OPENAI_MODEL ?? "gpt-4o-mini";
-const ELEVENLABS_API_KEY = import.meta.env.VITE_ELEVENLABS_API_KEY;
-const ELEVENLABS_VOICE_MALE = import.meta.env.VITE_ELEVENLABS_VOICE_MALE;
-const ELEVENLABS_VOICE_FEMALE = import.meta.env.VITE_ELEVENLABS_VOICE_FEMALE;
+import * as backendApi from './backendApi';
 
 export interface ScriptGenerationParams {
   topic: string;
@@ -16,45 +12,8 @@ export interface ScriptGenerationParams {
 }
 
 export async function generateScript(params: ScriptGenerationParams): Promise<string> {
-  const { topic, provider, length, person1Gender, person2Gender } = params;
-
-  // Generate appropriate names based on gender
-  const hostName = person1Gender === "male" ? "Alex" : "Sarah";
-  const guestName = person2Gender === "male" ? "Michael" : "Emma";
-  
-  const prompt = `Create a professional podcast script for "VoxGen AI Podcast Studio" between two people discussing: ${topic}
-
-Requirements:
-- Duration: ${length} minutes
-- Show Name: ALWAYS use "VoxGen AI Podcast Studio" - never change this name, never use any other show name
-- Host: ${hostName} (${person1Gender}) - the host of the show
-- Guest: ${guestName} (${person2Gender}) - the guest on the show
-- Format: A conversation between ${hostName} (the host) and ${guestName} (the guest)
-- Tone: Natural, warm, conversational - like a real podcast
-- Structure: 
-  1. Introduction where ${hostName} introduces the show "VoxGen AI Podcast Studio" and welcomes ${guestName}
-  2. ${hostName} and ${guestName} introduce themselves (${hostName} as host, ${guestName} as guest)
-  3. Main discussion about the topic
-  4. Conclusion
-- IMPORTANT: Format each line EXACTLY as "${hostName}: [dialogue]" or "${guestName}: [dialogue]" on separate lines
-- Each person's dialogue should be on its own line starting with "${hostName}:" or "${guestName}:" followed by a colon and space
-- NEVER use "Person 1" or "Person 2" - always use the actual names ${hostName} and ${guestName}
-- Make it engaging, informative, and natural-sounding
-- Target word count: approximately ${parseInt(length) * 150} words per minute
-- Alternate between ${hostName} and ${guestName} for a natural conversation flow
-
-Example format:
-${hostName}: Welcome to VoxGen AI Podcast Studio. I'm ${hostName}, your host for today's show.
-${guestName}: Thank you for having me, ${hostName}. I'm ${guestName}, and I'm excited to be here.
-${hostName}: Absolutely. Let's dive right into today's topic...
-
-Generate the complete script following this exact format:`;
-
-  if (provider === "gemini") {
-    return await callGemini(prompt);
-  } else {
-    return await callOpenAI(prompt);
-  }
+  // Use backend API instead of direct calls
+  return await backendApi.generateScript(params);
 }
 
 export async function refineScript(
@@ -62,157 +21,24 @@ export async function refineScript(
   provider: "gemini" | "chatgpt",
   instruction?: string
 ): Promise<string> {
-  const prompt = instruction
-    ? `${instruction}\n\nCurrent script:\n${script}\n\nPlease refine and improve the script:`
-    : `Please refine and improve this podcast script to make it more natural, engaging, and professional:\n\n${script}`;
-
-  if (provider === "gemini") {
-    return await callGemini(prompt);
-  } else {
-    return await callOpenAI(prompt);
-  }
+  // Use backend API instead of direct calls
+  return await backendApi.refineScript({ script, provider, instruction });
 }
 
-async function callGemini(prompt: string): Promise<string> {
-  if (!GEMINI_API_KEY) {
-    throw new Error("GEMINI_API_KEY is not set in environment variables");
-  }
-
-  try {
-    // Try gemini-1.5-pro first (more stable), fallback to gemini-pro if needed
-    const models = ["gemini-1.5-flash", "gemini-2.5-flash"];
-    
-    for (const model of models) {
-      try {
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [
-                {
-                  parts: [{ text: prompt }],
-                },
-              ],
-              generationConfig: {
-                temperature: 0.9,
-                topP: 0.95,
-                topK: 40,
-                maxOutputTokens: 8192,
-              },
-            }),
-          }
-        );
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.warn(`Gemini ${model} failed:`, response.status, errorText);
-          if (model === models[models.length - 1]) {
-            // Last model, throw error
-            throw new Error(`Gemini API error: ${response.status} - ${errorText}`);
-          }
-          continue; // Try next model
-        }
-
-        const data = await response.json();
-        
-        // Handle response structure
-        if (data.error) {
-          throw new Error(`Gemini API error: ${data.error.message || JSON.stringify(data.error)}`);
-        }
-        
-        const candidate = data?.candidates?.[0];
-        if (!candidate) {
-          throw new Error("No candidates returned from Gemini API");
-        }
-
-        // Extract text from parts
-        const parts = candidate.content?.parts || [];
-        const text = parts
-          .map((part: { text?: string }) => part?.text)
-          .filter(Boolean)
-          .join("\n\n");
-
-        if (!text || text.trim().length === 0) {
-          throw new Error("Empty response from Gemini API");
-        }
-
-        console.log(`✅ Successfully used Gemini model: ${model}`);
-        return text.trim();
-      } catch (error: any) {
-        // If this is the last model or error is not about model availability, throw
-        if (model === models[models.length - 1] || !error.message?.includes("404")) {
-          throw error;
-        }
-        // Otherwise, try next model
-        continue;
-      }
-    }
-    
-    throw new Error("All Gemini models failed");
-  } catch (error: any) {
-    console.error("Gemini API error:", error);
-    if (error.message) {
-      throw error;
-    }
-    throw new Error(`Failed to generate script with Gemini: ${error.toString()}`);
-  }
-}
-
-async function callOpenAI(prompt: string): Promise<string> {
-  if (!OPENAI_API_KEY) {
-    throw new Error("OPENAI_API_KEY is not set in environment variables");
-  }
-
-  try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: OPENAI_MODEL,
-        temperature: 0.9,
-        messages: [
-          {
-            role: "system",
-            content: "You are a professional podcast script writer. Create natural, engaging, and warm conversational scripts.",
-          },
-          { role: "user", content: prompt },
-        ],
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
-    }
-
-    const data = await response.json();
-    return data?.choices?.[0]?.message?.content?.trim() || "";
-  } catch (error) {
-    console.error("OpenAI API error:", error);
-    throw error;
-  }
-}
+// Removed: callGemini and callOpenAI - now handled by backend API
 
 export interface AudioGenerationParams {
   script: string;
   person1VoiceId: string;
   person2VoiceId: string;
+  onProgress?: (progress: number, current: number, total: number) => void;
 }
 
 export async function generatePodcastAudio(params: AudioGenerationParams): Promise<string> {
   const { script, person1VoiceId, person2VoiceId } = params;
 
-  if (!ELEVENLABS_API_KEY) {
-    throw new Error("ELEVENLABS_API_KEY is not set in environment variables");
-  }
-
   if (!person1VoiceId || !person2VoiceId) {
-    throw new Error("Voice IDs are not set. Please check your environment variables.");
+    throw new Error("Voice IDs are not set. Please check your backend environment variables.");
   }
 
   // Extract names from script (first occurrence of name patterns)
@@ -358,9 +184,20 @@ export async function generatePodcastAudio(params: AudioGenerationParams): Promi
   const segmentDurations: number[] = [];
   const generatedSegments: Array<{ speaker: 1 | 2; duration: number }> = []; // Track only successfully generated segments
   
+  // Report initial progress
+  if (params.onProgress) {
+    params.onProgress(0, 0, scriptSegments.length);
+  }
+  
   for (let i = 0; i < scriptSegments.length; i++) {
     const segment = scriptSegments[i];
     console.log(`Generating segment ${i + 1}/${scriptSegments.length} with voice ${segment.voiceId}, speaker: ${segment.speaker}`);
+    
+    // Report progress before generating this segment
+    if (params.onProgress) {
+      const progress = (i / scriptSegments.length) * 100;
+      params.onProgress(progress, i, scriptSegments.length);
+    }
     
     try {
       // Skip segments that are too short (less than 3 chars) - these are likely just interjections
@@ -369,7 +206,17 @@ export async function generatePodcastAudio(params: AudioGenerationParams): Promi
         continue;
       }
       
-      const audioBuffer = await generateElevenLabsAudio(segment.text, segment.voiceId);
+      // Use backend API for voice generation
+      const audioBuffer = await backendApi.generateVoice({
+        text: segment.text,
+        voiceId: segment.voiceId,
+      });
+      
+      // Add delay between requests to prevent rate limiting (except for last segment)
+      if (i < scriptSegments.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 800)); // 800ms delay between requests
+      }
+      
       if (audioBuffer && audioBuffer.byteLength >= 500) {
         // Decode audio to get actual duration (more accurate than file size estimation)
         let actualDuration = 0;
@@ -395,6 +242,12 @@ export async function generatePodcastAudio(params: AudioGenerationParams): Promi
         });
         
         console.log(`✅ Generated segment ${audioBuffers.length}: speaker ${segment.speaker} (${segment.speaker === 1 ? 'Host' : 'Guest'}), duration ${actualDuration.toFixed(2)}s, size: ${audioBuffer.byteLength} bytes`);
+        
+        // Report progress after successfully generating this segment
+        if (params.onProgress) {
+          const progress = ((i + 1) / scriptSegments.length) * 100;
+          params.onProgress(progress, i + 1, scriptSegments.length);
+        }
       } else {
         console.warn(`Segment ${i + 1} generated invalid audio (${audioBuffer?.byteLength || 0} bytes), skipping`);
       }
@@ -404,6 +257,13 @@ export async function generatePodcastAudio(params: AudioGenerationParams): Promi
         console.warn(`Segment ${i + 1} is too short, skipping: ${error.message}`);
         continue;
       }
+      
+      // Handle rate limit errors specifically
+      if (error.code === 'RATE_LIMIT_EXCEEDED' || error.message?.includes('Rate limit')) {
+        console.error(`Rate limit exceeded for segment ${i + 1}`);
+        throw new Error(`Rate limit exceeded. Please wait a moment before trying again. You may have exceeded your ElevenLabs quota.`);
+      }
+      
       console.error(`Error generating audio for segment ${i + 1}:`, error);
       throw new Error(`Failed to generate audio for segment ${i + 1}: ${error.message}`);
     }
@@ -415,8 +275,18 @@ export async function generatePodcastAudio(params: AudioGenerationParams): Promi
   
   console.log(`Successfully generated ${audioBuffers.length} out of ${scriptSegments.length} audio segments`);
 
+  // Report progress for concatenation
+  if (params.onProgress) {
+    params.onProgress(95, scriptSegments.length, scriptSegments.length);
+  }
+
   // Concatenate all audio buffers into a single audio file
   const concatenatedAudio = await concatenateAudioBuffers(audioBuffers);
+  
+  // Report completion
+  if (params.onProgress) {
+    params.onProgress(100, scriptSegments.length, scriptSegments.length);
+  }
   
   // Store segment timing information for synchronization
   // Calculate start times based on cumulative durations - use only successfully generated segments
@@ -445,93 +315,7 @@ export async function generatePodcastAudio(params: AudioGenerationParams): Promi
   return audioUrl;
 }
 
-async function generateElevenLabsAudio(text: string, voiceId: string): Promise<ArrayBuffer> {
-  if (!ELEVENLABS_API_KEY) {
-    throw new Error("ELEVENLABS_API_KEY is not set");
-  }
-
-  if (!voiceId) {
-    throw new Error("Voice ID is not set. Please check your environment variables.");
-  }
-
-  // Clean and validate text
-  let cleanText = text.trim();
-  
-  // Remove any remaining Person markers if any
-  cleanText = cleanText.replace(/^Person\s+[12]\s*[:\-]\s*/gmi, "").trim();
-  
-  // Allow shorter segments (like "Yes", "Okay", "I see") - minimum 3 characters
-  if (!cleanText || cleanText.length < 3) {
-    throw new Error(`Text is too short (${cleanText.length} chars). Minimum 3 characters required.`);
-  }
-
-  // Limit text length to avoid API errors (ElevenLabs has limits)
-  if (cleanText.length > 5000) {
-    console.warn(`Text is very long (${cleanText.length} chars), truncating to 5000 characters`);
-    cleanText = cleanText.substring(0, 5000);
-  }
-
-  console.log(`Calling ElevenLabs API with voice ID: ${voiceId}, text length: ${cleanText.length}`);
-
-  try {
-    // Use the stream endpoint for better reliability
-    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "xi-api-key": ELEVENLABS_API_KEY,
-        "Accept": "audio/mpeg",
-      },
-      body: JSON.stringify({
-        text: cleanText,
-        voice_settings: {
-          stability: 0.5,
-          similarity_boost: 0.75,
-          style: 0.0,
-          use_speaker_boost: true,
-        },
-        model_id: "eleven_multilingual_v2",
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("ElevenLabs API error response:", {
-        status: response.status,
-        statusText: response.statusText,
-        error: errorText,
-        voiceId: voiceId,
-        textLength: cleanText.length
-      });
-      throw new Error(`ElevenLabs API error (${response.status}): ${errorText || response.statusText}. Please verify your API key and voice ID are correct.`);
-    }
-
-    // Check if response is audio
-    const contentType = response.headers.get("content-type");
-    if (!contentType || !contentType.includes("audio")) {
-      const errorText = await response.text();
-      console.error("Non-audio response:", { contentType, errorText });
-      throw new Error(`Unexpected response type: ${contentType}. Response: ${errorText}`);
-    }
-
-    const arrayBuffer = await response.arrayBuffer();
-    
-    console.log(`Received audio data: ${arrayBuffer.byteLength} bytes`);
-    
-    // Validate we got actual audio data (MP3 files should be at least a few KB)
-    if (arrayBuffer.byteLength < 1000) {
-      throw new Error(`Audio response is too short (${arrayBuffer.byteLength} bytes). This usually means the API key or voice ID is incorrect, or the text couldn't be processed.`);
-    }
-
-    return arrayBuffer;
-  } catch (error: any) {
-    console.error("ElevenLabs API error:", error);
-    if (error.message) {
-      throw error;
-    }
-    throw new Error(`Failed to generate audio: ${error.toString()}`);
-  }
-}
+// Removed: generateElevenLabsAudio - now handled by backend API
 
 async function concatenateAudioBuffers(audioBuffers: ArrayBuffer[]): Promise<ArrayBuffer> {
   // Convert MP3 buffers to AudioBuffers, concatenate them, then export back to MP3
@@ -550,11 +334,24 @@ async function concatenateAudioBuffers(audioBuffers: ArrayBuffer[]): Promise<Arr
   return concatenated.buffer;
 }
 
-export function getVoiceId(gender: "male" | "female"): string {
+// Cache voice IDs to avoid repeated API calls
+let voiceIdsCache: { male: string; female: string } | null = null;
+
+export async function getVoiceId(gender: "male" | "female"): Promise<string> {
+  // Fetch voice IDs from backend if not cached
+  if (!voiceIdsCache) {
+    try {
+      voiceIdsCache = await backendApi.getVoiceIds();
+    } catch (error) {
+      console.error("Failed to fetch voice IDs:", error);
+      return ""; // Return empty string on error
+    }
+  }
+  
   if (gender === "male") {
-    return ELEVENLABS_VOICE_MALE || "";
+    return voiceIdsCache.male || "";
   } else {
-    return ELEVENLABS_VOICE_FEMALE || "";
+    return voiceIdsCache.female || "";
   }
 }
 
