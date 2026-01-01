@@ -56,6 +56,28 @@
   body {
     @apply bg-background text-foreground;
   }
+  
+  /* Performance optimizations */
+  * {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
+  /* Smooth scrolling */
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  /* Reduce motion for users who prefer it */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 }
 
 /* Custom animations for the podcast app */
@@ -83,4 +105,19 @@
 
 .animate-shimmer {
   animation: shimmer 2s infinite;
+}
+
+/* Performance optimizations for animations */
+@supports (will-change: transform) {
+  .animate-gradient-shift,
+  .animate-shimmer {
+    will-change: transform, filter;
+  }
+}
+
+/* GPU acceleration for smooth animations */
+.gpu-accelerate {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000px;
 }

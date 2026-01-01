@@ -23,7 +23,7 @@ export function ScriptEditor({ script, setScript, topic, onNext }: ScriptEditorP
   const [provider, setProvider] = useState<"gemini" | "chatgpt">("gemini");
   const [person1Gender, setPerson1Gender] = useState<"male" | "female">("male");
   const [person2Gender, setPerson2Gender] = useState<"male" | "female">("female");
-  const [length, setLength] = useState("10");
+  const [length, setLength] = useState("4");
   const [isGenerating, setIsGenerating] = useState(false);
   const [isGenerated, setIsGenerated] = useState(false);
   const [isRefining, setIsRefining] = useState(false);
@@ -237,15 +237,21 @@ export function ScriptEditor({ script, setScript, topic, onNext }: ScriptEditorP
                 <Input
                   id="length"
                   type="number"
-                  placeholder="e.g., 10"
+                  placeholder="4"
                   value={length}
-                  onChange={(e) => setLength(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    // Limit to 4 minutes for testing
+                    if (val === "" || (parseInt(val) >= 1 && parseInt(val) <= 4)) {
+                      setLength(val);
+                    }
+                  }}
                   className="bg-white/10 border-white/20 text-white placeholder:text-purple-300/50 focus:border-purple-400 backdrop-blur-sm"
-                  min="5"
-                  max="60"
+                  min="1"
+                  max="4"
                 />
                 <p className="text-sm text-purple-300/70 mt-2">
-                  Recommended: 10-30 minutes for most podcasts
+                  Testing mode: Maximum 4 minutes
                 </p>
               </div>
 

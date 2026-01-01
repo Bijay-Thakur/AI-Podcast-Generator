@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
+import { Progress } from "./ui/progress";
 import { Mic2, Play, Pause, Loader2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { generatePodcastAudio, getVoiceId } from "../lib/podcast-api";
@@ -9,6 +10,7 @@ import { generatePodcastAudio, getVoiceId } from "../lib/podcast-api";
 interface PodcastGeneratorProps {
   script: string;
   topic: string;
+  onAudioGenerated?: () => void;
 }
 
 // Podcast speakers image component with glowing borders
@@ -25,13 +27,14 @@ function PodcastSpeakers({ hostGender, isPlaying, currentSpeaker }: { hostGender
   const femaleImage = new URL("../lib/female.jpg", import.meta.url).href;
   
   return (
-    <div className="flex items-center justify-center gap-8 md:gap-12 py-8">
+    <div className="flex items-center justify-center gap-4 sm:gap-6 md:gap-8 lg:gap-12 py-4 sm:py-6 md:py-8">
       {/* Person 1 (Host) */}
       <motion.div
         className="relative flex flex-col items-center"
         initial={{ opacity: 0, x: -50 }}
         animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.5 }}
+        transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
+        style={{ willChange: 'transform, opacity' }}
       >
         <div
           className={`relative rounded-2xl p-2 transition-all duration-300 ${
@@ -62,7 +65,8 @@ function PodcastSpeakers({ hostGender, isPlaying, currentSpeaker }: { hostGender
             <img
               src={person1Gender === "male" ? maleImage : femaleImage}
               alt={person1Gender === "male" ? "Male speaker" : "Female speaker"}
-              className="w-48 h-48 md:w-64 md:h-64 object-contain bg-gray-900/30"
+              className="w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 lg:w-64 lg:h-64 object-contain bg-gray-900/30"
+              style={{ imageRendering: 'auto' }}
             />
           </motion.div>
           {person1Speaking && (
@@ -84,7 +88,7 @@ function PodcastSpeakers({ hostGender, isPlaying, currentSpeaker }: { hostGender
             />
           )}
         </div>
-        <p className="text-sm md:text-base font-semibold text-purple-200 mt-4">
+        <p className="text-xs sm:text-sm md:text-base font-semibold text-purple-200 mt-2 sm:mt-3 md:mt-4">
           {person1Speaking ? "Speaking..." : "Host"}
         </p>
       </motion.div>
@@ -94,7 +98,8 @@ function PodcastSpeakers({ hostGender, isPlaying, currentSpeaker }: { hostGender
         className="relative flex flex-col items-center"
         initial={{ opacity: 0, x: 50 }}
         animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.5 }}
+        transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
+        style={{ willChange: 'transform, opacity' }}
       >
         <div
           className={`relative rounded-2xl p-2 transition-all duration-300 ${
@@ -125,7 +130,8 @@ function PodcastSpeakers({ hostGender, isPlaying, currentSpeaker }: { hostGender
             <img
               src={person2Gender === "male" ? maleImage : femaleImage}
               alt={person2Gender === "male" ? "Male speaker" : "Female speaker"}
-              className="w-48 h-48 md:w-64 md:h-64 object-contain bg-gray-900/30"
+              className="w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 lg:w-64 lg:h-64 object-contain bg-gray-900/30"
+              style={{ imageRendering: 'auto' }}
             />
           </motion.div>
           {person2Speaking && (
@@ -147,7 +153,7 @@ function PodcastSpeakers({ hostGender, isPlaying, currentSpeaker }: { hostGender
             />
           )}
         </div>
-        <p className="text-sm md:text-base font-semibold text-purple-200 mt-4">
+        <p className="text-xs sm:text-sm md:text-base font-semibold text-purple-200 mt-2 sm:mt-3 md:mt-4">
           {person2Speaking ? "Speaking..." : "Guest"}
         </p>
       </motion.div>
@@ -155,7 +161,15 @@ function PodcastSpeakers({ hostGender, isPlaying, currentSpeaker }: { hostGender
   );
 }
 
-export function PodcastGenerator({ script, topic }: PodcastGeneratorProps) {
+// Helper function to format time as MM:SS
+function formatTime(seconds: number): string {
+  if (isNaN(seconds) || !isFinite(seconds)) return "0:00";
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
+}
+
+export function PodcastGenerator({ script, topic, onAudioGenerated }: PodcastGeneratorProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isGenerated, setIsGenerated] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -165,6 +179,8 @@ export function PodcastGenerator({ script, topic }: PodcastGeneratorProps) {
   const [currentSpeaker, setCurrentSpeaker] = useState<1 | 2 | null>(null);
   const speakerTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastSpeakerRef = useRef<1 | 2 | null>(null);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
 
   // Get voice genders from localStorage (set by ScriptEditor)
   const person1Gender = (localStorage.getItem("podcast_voice_person1") || "male") as "male" | "female";
@@ -212,8 +228,21 @@ export function PodcastGenerator({ script, topic }: PodcastGeneratorProps) {
       const handleEnded = () => {
         setIsPlaying(false);
         setCurrentSpeaker(null);
+        setCurrentTime(0);
+      };
+      const handleLoadedMetadata = () => {
+        if (audio.duration) {
+          setDuration(audio.duration);
+        }
       };
       const handleTimeUpdate = () => {
+        // Update current time for progress bar
+        if (audio.currentTime) {
+          setCurrentTime(audio.currentTime);
+        }
+        if (audio.duration && !duration) {
+          setDuration(audio.duration);
+        }
         // Use stored timing data for accurate synchronization
         if (audio.duration) {
           try {
@@ -339,19 +368,21 @@ export function PodcastGenerator({ script, topic }: PodcastGeneratorProps) {
       audio.addEventListener("play", handlePlay);
       audio.addEventListener("pause", handlePause);
       audio.addEventListener("ended", handleEnded);
+      audio.addEventListener("loadedmetadata", handleLoadedMetadata);
       audio.addEventListener("timeupdate", handleTimeUpdate);
 
       return () => {
         audio.removeEventListener("play", handlePlay);
         audio.removeEventListener("pause", handlePause);
         audio.removeEventListener("ended", handleEnded);
+        audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
         audio.removeEventListener("timeupdate", handleTimeUpdate);
         if (speakerTimerRef.current) {
           clearTimeout(speakerTimerRef.current);
         }
       };
     }
-  }, [audioUrl]);
+  }, [audioUrl, duration]);
 
   const handleGenerate = async () => {
     if (!script) {
@@ -369,6 +400,8 @@ export function PodcastGenerator({ script, topic }: PodcastGeneratorProps) {
     setIsPlaying(false);
     setCurrentSpeaker(null);
     setShowSuccess(false);
+    setCurrentTime(0);
+    setDuration(0);
 
     try {
       const url = await generatePodcastAudio({
@@ -379,6 +412,10 @@ export function PodcastGenerator({ script, topic }: PodcastGeneratorProps) {
       setAudioUrl(url);
       setIsGenerated(true);
       setShowSuccess(true);
+      // Notify parent component that audio is generated
+      if (onAudioGenerated) {
+        onAudioGenerated();
+      }
     } catch (error: any) {
       toast.error(error.message || "Failed to generate audio. Please check your API keys.");
       console.error("Audio generation error:", error);
@@ -398,6 +435,19 @@ export function PodcastGenerator({ script, topic }: PodcastGeneratorProps) {
         toast.error("Failed to play audio");
       });
     }
+  };
+
+  const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!audioRef.current || !duration) return;
+    
+    const progressBar = e.currentTarget;
+    const rect = progressBar.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const percentage = clickX / rect.width;
+    const newTime = percentage * duration;
+    
+    audioRef.current.currentTime = newTime;
+    setCurrentTime(newTime);
   };
 
   const handleStartPodcast = () => {
@@ -442,11 +492,12 @@ export function PodcastGenerator({ script, topic }: PodcastGeneratorProps) {
                 <Button
                   onClick={handleGenerate}
                   disabled={isGenerating || !script}
-                  className="w-24 h-24 rounded-full bg-gradient-to-br from-purple-500 via-pink-500 to-cyan-500 hover:from-purple-600 hover:via-pink-600 hover:to-cyan-600 text-white border-0 shadow-2xl shadow-purple-500/50 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-all duration-300 relative overflow-hidden group disabled:hover:scale-100"
+                  className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-purple-500 via-pink-500 to-cyan-500 hover:from-purple-600 hover:via-pink-600 hover:to-cyan-600 text-white border-0 shadow-2xl shadow-purple-500/50 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-all duration-300 relative overflow-hidden group disabled:hover:scale-100"
+                  style={{ willChange: 'transform' }}
                 >
                   {isGenerating ? (
                     <>
-                      <Loader2 className="w-10 h-10 animate-spin relative z-10" />
+                      <Loader2 className="w-8 h-8 sm:w-10 sm:h-10 animate-spin relative z-10" />
                       <motion.div
                         className="absolute inset-0 bg-gradient-to-r from-cyan-400/30 via-pink-400/30 to-purple-400/30"
                         animate={{
@@ -460,7 +511,7 @@ export function PodcastGenerator({ script, topic }: PodcastGeneratorProps) {
                       />
                     </>
                   ) : (
-                    <Mic2 className="w-10 h-10" />
+                    <Mic2 className="w-8 h-8 sm:w-10 sm:h-10" />
                   )}
                 </Button>
               </motion.div>
@@ -532,16 +583,18 @@ export function PodcastGenerator({ script, topic }: PodcastGeneratorProps) {
             )}
           </AnimatePresence>
 
-          {/* Play/Pause Controls at Bottom (shown after generation) */}
+          {/* Play/Pause Controls with Progress Bar (shown after generation) */}
           {isGenerated && !showSuccess && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex flex-col items-center gap-4 pt-4"
+              className="flex flex-col items-center gap-4 pt-4 w-full max-w-2xl mx-auto"
             >
+              {/* Play/Pause Button */}
               <Button
                 onClick={handlePlayPause}
-                className="w-20 h-20 rounded-full bg-gradient-to-br from-green-500 via-emerald-500 to-cyan-500 hover:from-green-600 hover:via-emerald-600 hover:to-cyan-600 text-white border-0 shadow-2xl shadow-green-500/50 font-semibold transition-all duration-300 relative overflow-hidden group"
+                className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br from-green-500 via-emerald-500 to-cyan-500 hover:from-green-600 hover:via-emerald-600 hover:to-cyan-600 text-white border-0 shadow-2xl shadow-green-500/50 font-semibold transition-all duration-300 relative overflow-hidden group"
+                style={{ willChange: 'transform' }}
               >
                 <motion.div
                   className="absolute inset-0 bg-gradient-to-r from-cyan-400/30 via-green-400/30 to-emerald-400/30"
@@ -555,12 +608,45 @@ export function PodcastGenerator({ script, topic }: PodcastGeneratorProps) {
                   }}
                 />
                 {isPlaying ? (
-                  <Pause className="w-8 h-8 relative z-10" />
+                  <Pause className="w-6 h-6 sm:w-8 sm:h-8 relative z-10" />
                 ) : (
-                  <Play className="w-8 h-8 ml-1 relative z-10" />
+                  <Play className="w-6 h-6 sm:w-8 sm:h-8 ml-1 relative z-10" />
                 )}
               </Button>
-              <p className="text-sm text-purple-200 font-medium">
+
+              {/* Progress Bar and Time Display */}
+              <div className="w-full space-y-3 px-2">
+                {/* Progress Bar */}
+                <div
+                  onClick={handleProgressClick}
+                  className="w-full h-2 bg-white/10 rounded-full cursor-pointer hover:h-3 transition-all duration-200 relative group backdrop-blur-sm"
+                >
+                  <div
+                    className="h-full bg-gradient-to-r from-green-500 via-emerald-500 to-cyan-500 rounded-full transition-all duration-100 relative shadow-lg shadow-green-500/30"
+                    style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
+                  >
+                    {/* Progress indicator dot - always visible but more prominent on hover */}
+                    <div className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-3 h-3 bg-white rounded-full shadow-lg shadow-white/50 opacity-60 group-hover:opacity-100 group-hover:w-4 group-hover:h-4 transition-all duration-200" />
+                  </div>
+                  {/* Hover indicator line */}
+                  <div className="absolute inset-0 opacity-0 group-hover:opacity-20 transition-opacity">
+                    <div className="h-full w-px bg-white/50" style={{ marginLeft: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }} />
+                  </div>
+                </div>
+
+                {/* Time Display */}
+                <div className="flex justify-between items-center text-xs sm:text-sm">
+                  <span className="font-mono font-semibold text-purple-200">
+                    {formatTime(currentTime)}
+                  </span>
+                  <span className="font-mono font-semibold text-purple-200/70">
+                    {formatTime(duration)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Status Text */}
+              <p className="text-xs sm:text-sm text-purple-200 font-medium">
                 {isPlaying ? "Playing" : "Paused"}
               </p>
             </motion.div>

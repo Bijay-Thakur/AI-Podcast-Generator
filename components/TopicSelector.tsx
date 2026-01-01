@@ -7,6 +7,7 @@ import { Label } from "./ui/label";
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
 import { Textarea } from "./ui/textarea";
 import { Sparkles, Brain, Rocket, Shield, Lightbulb, ArrowRight, Zap } from "lucide-react";
+import { toast } from "sonner";
 
 interface TopicSelectorProps {
   selectedTopic: string;
@@ -78,9 +79,21 @@ export function TopicSelector({ selectedTopic, setSelectedTopic, onNext }: Topic
   };
 
   const handleNext = () => {
-    if (selectedTopic || customTopic) {
-      if (customTopic && topicMode === "custom") {
-        setSelectedTopic(customTopic);
+    // Validate based on mode
+    if (topicMode === "custom") {
+      // In custom mode, require a non-empty, trimmed topic
+      const trimmedCustomTopic = customTopic.trim();
+      if (!trimmedCustomTopic) {
+        toast.error("Please enter a topic name before continuing!");
+        return;
+      }
+      setSelectedTopic(trimmedCustomTopic);
+      onNext();
+    } else {
+      // In preset mode, require a selected topic
+      if (!selectedTopic) {
+        toast.error("Please select a topic before continuing!");
+        return;
       }
       onNext();
     }
@@ -286,8 +299,9 @@ export function TopicSelector({ selectedTopic, setSelectedTopic, onNext }: Topic
           >
             <Button
               onClick={handleNext}
-              disabled={!selectedTopic && !customTopic}
-              className="w-full h-16 bg-gradient-to-r from-purple-500 via-pink-500 to-cyan-500 hover:from-purple-600 hover:via-pink-600 hover:to-cyan-600 text-white border-0 shadow-2xl shadow-purple-500/50 disabled:opacity-50 disabled:cursor-not-allowed text-lg font-semibold transition-all duration-300 disabled:hover:scale-100 relative overflow-hidden group"
+              disabled={(topicMode === "preset" && !selectedTopic) || (topicMode === "custom" && !customTopic.trim())}
+              className="w-full h-12 sm:h-14 md:h-16 bg-gradient-to-r from-purple-500 via-pink-500 to-cyan-500 hover:from-purple-600 hover:via-pink-600 hover:to-cyan-600 text-white border-0 shadow-2xl shadow-purple-500/50 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base md:text-lg font-semibold transition-all duration-300 disabled:hover:scale-100 relative overflow-hidden group"
+              style={{ willChange: 'transform' }}
             >
               {/* Animated background effect */}
               <motion.div

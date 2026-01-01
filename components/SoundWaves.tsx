@@ -1,10 +1,26 @@
 import { motion } from "framer-motion";
+import { useEffect, useState } from "react";
 
 export function SoundWaves() {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Reduce animations on mobile for better performance
+  const waveCount = isMobile ? 3 : 6;
+  const particleCount = isMobile ? 6 : 12;
+
   return (
-    <div className="fixed inset-0 pointer-events-none overflow-hidden opacity-30">
+    <div className="fixed inset-0 pointer-events-none overflow-hidden opacity-20 sm:opacity-30" style={{ willChange: 'transform' }}>
       {/* Central pulsing waves */}
-      {[...Array(6)].map((_, i) => (
+      {[...Array(waveCount)].map((_, i) => (
         <motion.div
           key={`wave-${i}`}
           className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
@@ -22,10 +38,11 @@ export function SoundWaves() {
           }}
         >
           <div
-            className="w-[600px] h-[600px] rounded-full border-2"
+            className="w-[300px] h-[300px] sm:w-[400px] sm:h-[400px] md:w-[600px] md:h-[600px] rounded-full border-2"
             style={{
               borderColor: `hsl(${280 + i * 40}, 70%, 60%)`,
-              boxShadow: `0 0 20px hsl(${280 + i * 40}, 70%, 60%)`,
+              boxShadow: `0 0 ${isMobile ? '10px' : '20px'} hsl(${280 + i * 40}, 70%, 60%)`,
+              willChange: 'transform',
             }}
           />
         </motion.div>
@@ -56,17 +73,18 @@ export function SoundWaves() {
           }}
         >
           <div
-            className="w-[400px] h-[400px] rounded-full border"
+            className="w-[200px] h-[200px] sm:w-[300px] sm:h-[300px] md:w-[400px] md:h-[400px] rounded-full border"
             style={{
               borderColor: `hsl(${320 + cornerIndex * 20}, 60%, 50%)`,
-              boxShadow: `0 0 15px hsl(${320 + cornerIndex * 20}, 60%, 50%)`,
+              boxShadow: `0 0 ${isMobile ? '8px' : '15px'} hsl(${320 + cornerIndex * 20}, 60%, 50%)`,
+              willChange: 'transform',
             }}
           />
         </motion.div>
       ))}
 
-      {/* Floating particles */}
-      {[...Array(12)].map((_, i) => (
+      {/* Floating particles - reduced on mobile */}
+      {[...Array(particleCount)].map((_, i) => (
         <motion.div
           key={`particle-${i}`}
           className="absolute rounded-full blur-sm"
