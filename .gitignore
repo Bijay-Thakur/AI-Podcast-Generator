@@ -5,9 +5,12 @@ node_modules/
 dist/
 build/
 
-# Environment variables
+# Environment variables (DO NOT COMMIT API KEYS!)
 .env
 .env.local
+.env.development
+.env.production
+.env*.local
 
 # Logs
 npm-debug.log*

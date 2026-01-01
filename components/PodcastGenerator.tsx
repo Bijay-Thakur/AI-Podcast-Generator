@@ -1,74 +1,409 @@
-import { useState } from "react";
-import { motion } from "framer-motion";
+import { useState, useRef, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
-import { Label } from "./ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { Checkbox } from "./ui/checkbox";
-import { Separator } from "./ui/separator";
-import { Alert, AlertDescription } from "./ui/alert";
-import { 
-  Mic2, 
-  Download, 
-  Sparkles,
-  Music,
-  Settings,
-  FileAudio,
-  Volume2,
-  CheckCircle2
-} from "lucide-react";
+import { Mic2, Play, Pause, Loader2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
+import { generatePodcastAudio, getVoiceId } from "../lib/podcast-api";
 
 interface PodcastGeneratorProps {
   script: string;
   topic: string;
 }
 
+// Podcast speakers image component with glowing borders
+function PodcastSpeakers({ hostGender, isPlaying, currentSpeaker }: { hostGender: "male" | "female"; isPlaying: boolean; currentSpeaker: 1 | 2 | null }) {
+  // hostGender determines Person 1 (Host), Guest (Person 2) is opposite gender
+  const person1Gender = hostGender;
+  const person2Gender = hostGender === "male" ? "female" : "male";
+  
+  const person1Speaking = isPlaying && currentSpeaker === 1;
+  const person2Speaking = isPlaying && currentSpeaker === 2;
+  
+  // Import images
+  const maleImage = new URL("../lib/male.jpg", import.meta.url).href;
+  const femaleImage = new URL("../lib/female.jpg", import.meta.url).href;
+  
+  return (
+    <div className="flex items-center justify-center gap-8 md:gap-12 py-8">
+      {/* Person 1 (Host) */}
+      <motion.div
+        className="relative flex flex-col items-center"
+        initial={{ opacity: 0, x: -50 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.5 }}
+      >
+        <div
+          className={`relative rounded-2xl p-2 transition-all duration-300 ${
+            person1Speaking
+              ? person1Gender === "male"
+                ? "shadow-[0_0_30px_rgba(168,85,247,0.8),0_0_60px_rgba(168,85,247,0.5)]"
+                : "shadow-[0_0_30px_rgba(236,72,153,0.8),0_0_60px_rgba(236,72,153,0.5)]"
+              : ""
+          }`}
+        >
+          <motion.div
+            className={`rounded-xl overflow-hidden ${
+              person1Speaking
+                ? person1Gender === "male"
+                  ? "ring-4 ring-purple-400 ring-opacity-80"
+                  : "ring-4 ring-pink-400 ring-opacity-80"
+                : "ring-2 ring-white/20"
+            }`}
+            animate={{
+              scale: person1Speaking ? [1, 1.02, 1] : 1,
+            }}
+            transition={{
+              duration: 2,
+              repeat: person1Speaking ? Infinity : 0,
+              ease: "easeInOut",
+            }}
+          >
+            <img
+              src={person1Gender === "male" ? maleImage : femaleImage}
+              alt={person1Gender === "male" ? "Male speaker" : "Female speaker"}
+              className="w-48 h-48 md:w-64 md:h-64 object-contain bg-gray-900/30"
+            />
+          </motion.div>
+          {person1Speaking && (
+            <motion.div
+              className={`absolute -inset-1 rounded-xl ${
+                person1Gender === "male"
+                  ? "bg-gradient-to-r from-purple-500/50 via-purple-400/50 to-purple-500/50"
+                  : "bg-gradient-to-r from-pink-500/50 via-pink-400/50 to-pink-500/50"
+              } blur-xl -z-10`}
+              animate={{
+                opacity: [0.5, 1, 0.5],
+                scale: [1, 1.05, 1],
+              }}
+              transition={{
+                duration: 2,
+                repeat: Infinity,
+                ease: "easeInOut",
+              }}
+            />
+          )}
+        </div>
+        <p className="text-sm md:text-base font-semibold text-purple-200 mt-4">
+          {person1Speaking ? "Speaking..." : "Host"}
+        </p>
+      </motion.div>
+
+      {/* Person 2 (Guest) */}
+      <motion.div
+        className="relative flex flex-col items-center"
+        initial={{ opacity: 0, x: 50 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.5 }}
+      >
+        <div
+          className={`relative rounded-2xl p-2 transition-all duration-300 ${
+            person2Speaking
+              ? person2Gender === "male"
+                ? "shadow-[0_0_30px_rgba(168,85,247,0.8),0_0_60px_rgba(168,85,247,0.5)]"
+                : "shadow-[0_0_30px_rgba(236,72,153,0.8),0_0_60px_rgba(236,72,153,0.5)]"
+              : ""
+          }`}
+        >
+          <motion.div
+            className={`rounded-xl overflow-hidden ${
+              person2Speaking
+                ? person2Gender === "male"
+                  ? "ring-4 ring-purple-400 ring-opacity-80"
+                  : "ring-4 ring-pink-400 ring-opacity-80"
+                : "ring-2 ring-white/20"
+            }`}
+            animate={{
+              scale: person2Speaking ? [1, 1.02, 1] : 1,
+            }}
+            transition={{
+              duration: 2,
+              repeat: person2Speaking ? Infinity : 0,
+              ease: "easeInOut",
+            }}
+          >
+            <img
+              src={person2Gender === "male" ? maleImage : femaleImage}
+              alt={person2Gender === "male" ? "Male speaker" : "Female speaker"}
+              className="w-48 h-48 md:w-64 md:h-64 object-contain bg-gray-900/30"
+            />
+          </motion.div>
+          {person2Speaking && (
+            <motion.div
+              className={`absolute -inset-1 rounded-xl ${
+                person2Gender === "male"
+                  ? "bg-gradient-to-r from-purple-500/50 via-purple-400/50 to-purple-500/50"
+                  : "bg-gradient-to-r from-pink-500/50 via-pink-400/50 to-pink-500/50"
+              } blur-xl -z-10`}
+              animate={{
+                opacity: [0.5, 1, 0.5],
+                scale: [1, 1.05, 1],
+              }}
+              transition={{
+                duration: 2,
+                repeat: Infinity,
+                ease: "easeInOut",
+              }}
+            />
+          )}
+        </div>
+        <p className="text-sm md:text-base font-semibold text-purple-200 mt-4">
+          {person2Speaking ? "Speaking..." : "Guest"}
+        </p>
+      </motion.div>
+    </div>
+  );
+}
+
 export function PodcastGenerator({ script, topic }: PodcastGeneratorProps) {
-  const [voice, setVoice] = useState("professional");
-  const [musicStyle, setMusicStyle] = useState("upbeat");
-  const [includeIntro, setIncludeIntro] = useState(true);
-  const [includeOutro, setIncludeOutro] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isGenerated, setIsGenerated] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [currentSpeaker, setCurrentSpeaker] = useState<1 | 2 | null>(null);
+  const speakerTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSpeakerRef = useRef<1 | 2 | null>(null);
 
-  const handleGenerate = () => {
+  // Get voice genders from localStorage (set by ScriptEditor)
+  const person1Gender = (localStorage.getItem("podcast_voice_person1") || "male") as "male" | "female";
+  const person2Gender = (localStorage.getItem("podcast_voice_person2") || "female") as "male" | "female";
+
+  const person1VoiceId = getVoiceId(person1Gender);
+  const person2VoiceId = getVoiceId(person2Gender);
+
+  useEffect(() => {
+    // Cleanup audio URL on unmount
+    return () => {
+      if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+      }
+    };
+  }, [audioUrl]);
+
+  useEffect(() => {
+    // Handle audio playback state and track speaking
+    if (audioRef.current) {
+      const audio = audioRef.current;
+      const handlePlay = () => {
+        setIsPlaying(true);
+        // Reset speaker tracking when starting playback
+        lastSpeakerRef.current = null;
+        setCurrentSpeaker(null);
+        
+        // Log timing data on play for debugging
+        const timingDataStr = sessionStorage.getItem('podcast_timing_data');
+        if (timingDataStr) {
+          try {
+            const timingData = JSON.parse(timingDataStr);
+            console.log('🎵 Playback started. Timing data:', timingData);
+            console.log(`Total segments: ${timingData.segments.length}`);
+            console.log(`Speakers: ${timingData.segments.map((s: any) => s.speaker).join(', ')}`);
+          } catch (e) {
+            console.error('Error parsing timing data:', e);
+          }
+        }
+      };
+      const handlePause = () => {
+        setIsPlaying(false);
+        setCurrentSpeaker(null);
+      };
+      const handleEnded = () => {
+        setIsPlaying(false);
+        setCurrentSpeaker(null);
+      };
+      const handleTimeUpdate = () => {
+        // Use stored timing data for accurate synchronization
+        if (audio.duration) {
+          try {
+            const timingDataStr = sessionStorage.getItem('podcast_timing_data');
+            if (timingDataStr) {
+              const timingData = JSON.parse(timingDataStr);
+              const currentTime = audio.currentTime;
+              
+              // Find which segment is currently playing based on actual timing
+              let currentSegment = null;
+              
+              // Simple and reliable approach: find the segment whose time range contains currentTime
+              for (let i = 0; i < timingData.segments.length; i++) {
+                const segment = timingData.segments[i];
+                const segmentStart = segment.startTime;
+                const segmentEnd = segment.startTime + segment.duration;
+                
+                // Check if currentTime falls within this segment's range
+                // Use >= for start and <= for end (inclusive end to catch transitions)
+                if (currentTime >= segmentStart && currentTime <= segmentEnd) {
+                  currentSegment = segment;
+                  break;
+                }
+              }
+              
+              // If no segment found (edge cases), find the closest one
+              if (!currentSegment && timingData.segments.length > 0) {
+                // Find the segment that should be playing based on start time
+                // Find the last segment that has started
+                for (let i = timingData.segments.length - 1; i >= 0; i--) {
+                  if (currentTime >= timingData.segments[i].startTime) {
+                    currentSegment = timingData.segments[i];
+                    break;
+                  }
+                }
+                
+                // If still no segment (before first), use first one
+                if (!currentSegment) {
+                  currentSegment = timingData.segments[0];
+                }
+              }
+              
+              // Debug logging every 2 seconds
+              if (Math.floor(currentTime) % 2 === 0 && Math.floor(currentTime) !== Math.floor(audio.currentTime - 0.1)) {
+                console.log(`⏱️ Time: ${currentTime.toFixed(2)}s, Current segment: ${currentSegment ? `Speaker ${currentSegment.speaker} (${currentSegment.speaker === 1 ? 'Host' : 'Guest'}), range: ${currentSegment.startTime.toFixed(2)}s - ${(currentSegment.startTime + currentSegment.duration).toFixed(2)}s` : 'None'}`);
+              }
+              
+              if (currentSegment) {
+                const newSpeaker = currentSegment.speaker as 1 | 2;
+                
+                // Always update if speaker changed OR if this is the first time
+                if (newSpeaker !== lastSpeakerRef.current || lastSpeakerRef.current === null) {
+                  if (speakerTimerRef.current) {
+                    clearTimeout(speakerTimerRef.current);
+                  }
+                  
+                  // Update immediately for better synchronization
+                  setCurrentSpeaker(newSpeaker);
+                  const wasNull = lastSpeakerRef.current === null;
+                  lastSpeakerRef.current = newSpeaker;
+                  
+                  if (wasNull) {
+                    console.log(`🎤 Initial speaker: ${newSpeaker === 1 ? 'Host (1)' : 'Guest (2)'} at ${currentTime.toFixed(2)}s`);
+                  } else {
+                    console.log(`🎤 Speaker changed to: ${newSpeaker === 1 ? 'Host (1)' : 'Guest (2)'} at ${currentTime.toFixed(2)}s (segment start: ${currentSegment.startTime.toFixed(2)}s, duration: ${currentSegment.duration.toFixed(2)}s, end: ${(currentSegment.startTime + currentSegment.duration).toFixed(2)}s)`);
+                  }
+                }
+              } else {
+                // Debug: log when no segment is found
+                if (Math.floor(currentTime) % 2 === 0) { // Log every 2 seconds to avoid spam
+                  console.warn(`⚠️ No segment found for current time ${currentTime.toFixed(2)}s. Total segments: ${timingData.segments.length}`);
+                }
+              }
+            } else {
+              // Fallback: parse script for speaker names
+              if (script) {
+                const lines = script.split("\n").filter(line => line.trim());
+                const namePattern = /^([A-Z][a-z]+):\s*/;
+                const foundNames: string[] = [];
+                
+                for (const line of lines) {
+                  const match = line.trim().match(namePattern);
+                  if (match && !foundNames.includes(match[1])) {
+                    foundNames.push(match[1]);
+                    if (foundNames.length === 2) break;
+                  }
+                }
+                
+                if (foundNames.length >= 2) {
+                  const hostName = foundNames[0];
+                  const guestName = foundNames[1];
+                  const speakerSequence: (1 | 2)[] = [];
+                  
+                  for (const line of lines) {
+                    const trimmed = line.trim();
+                    if (trimmed.match(new RegExp(`^${hostName}\\s*[:\-]`, "i"))) {
+                      speakerSequence.push(1);
+                    } else if (trimmed.match(new RegExp(`^${guestName}\\s*[:\-]`, "i"))) {
+                      speakerSequence.push(2);
+                    }
+                  }
+                  
+                  if (speakerSequence.length > 0) {
+                    const progress = audio.currentTime / audio.duration;
+                    const segmentIndex = Math.floor(progress * speakerSequence.length);
+                    const clampedIndex = Math.min(segmentIndex, speakerSequence.length - 1);
+                    const newSpeaker = speakerSequence[clampedIndex];
+                    
+                    if (newSpeaker !== lastSpeakerRef.current) {
+                      setCurrentSpeaker(newSpeaker);
+                      lastSpeakerRef.current = newSpeaker;
+                    }
+                  }
+                }
+              }
+            }
+          } catch (error) {
+            console.error("Error parsing timing data:", error);
+          }
+        }
+      };
+
+      audio.addEventListener("play", handlePlay);
+      audio.addEventListener("pause", handlePause);
+      audio.addEventListener("ended", handleEnded);
+      audio.addEventListener("timeupdate", handleTimeUpdate);
+
+      return () => {
+        audio.removeEventListener("play", handlePlay);
+        audio.removeEventListener("pause", handlePause);
+        audio.removeEventListener("ended", handleEnded);
+        audio.removeEventListener("timeupdate", handleTimeUpdate);
+        if (speakerTimerRef.current) {
+          clearTimeout(speakerTimerRef.current);
+        }
+      };
+    }
+  }, [audioUrl]);
+
+  const handleGenerate = async () => {
     if (!script) {
-      toast.error("Please write a script first!");
+      toast.error("Please generate a script first!");
+      return;
+    }
+
+    if (!person1VoiceId || !person2VoiceId) {
+      toast.error("Voice IDs not configured. Please check your environment variables.");
       return;
     }
 
     setIsGenerating(true);
-    
-    setTimeout(() => {
-      setIsGenerating(false);
+    setIsGenerated(false);
+    setIsPlaying(false);
+    setCurrentSpeaker(null);
+    setShowSuccess(false);
+
+    try {
+      const url = await generatePodcastAudio({
+        script,
+        person1VoiceId,
+        person2VoiceId,
+      });
+      setAudioUrl(url);
       setIsGenerated(true);
-      toast.success("Podcast preview generated successfully!");
-    }, 3000);
+      setShowSuccess(true);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to generate audio. Please check your API keys.");
+      console.error("Audio generation error:", error);
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
-  const exportInstructions = [
-    {
-      step: "1. Generate your script",
-      tool: "Use ChatGPT or Google Gemini",
-      status: script ? "complete" : "pending"
-    },
-    {
-      step: "2. Convert to audio",
-      tool: "Use ElevenLabs or Speechify",
-      status: isGenerated ? "complete" : "pending"
-    },
-    {
-      step: "3. Add music",
-      tool: "Use Suno or Udio",
-      status: "pending"
-    },
-    {
-      step: "4. Edit & polish",
-      tool: "Use Descript or Audacity",
-      status: "pending"
+  const handlePlayPause = () => {
+    if (!audioRef.current || !audioUrl) return;
+
+    if (isPlaying) {
+      audioRef.current.pause();
+    } else {
+      audioRef.current.play().catch((error) => {
+        console.error("Playback error:", error);
+        toast.error("Failed to play audio");
+      });
     }
-  ];
+  };
+
+  const handleStartPodcast = () => {
+    setShowSuccess(false);
+    handlePlayPause();
+  };
 
   return (
     <motion.div 
@@ -88,275 +423,185 @@ export function PodcastGenerator({ script, topic }: PodcastGeneratorProps) {
             Generate Your Podcast
           </CardTitle>
           <CardDescription className="text-purple-200/80">
-            Configure your podcast settings and export your creation
+            Generate audio for your podcast script
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6 relative">
-          {/* Podcast Summary */}
-          {script && (
+          {/* Generate Button (shown when not generated) */}
+          {!isGenerated && (
+            <motion.div
+              className="flex flex-col items-center gap-4 py-12"
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.5 }}
+            >
+              <motion.div
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <Button
+                  onClick={handleGenerate}
+                  disabled={isGenerating || !script}
+                  className="w-24 h-24 rounded-full bg-gradient-to-br from-purple-500 via-pink-500 to-cyan-500 hover:from-purple-600 hover:via-pink-600 hover:to-cyan-600 text-white border-0 shadow-2xl shadow-purple-500/50 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-all duration-300 relative overflow-hidden group disabled:hover:scale-100"
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="w-10 h-10 animate-spin relative z-10" />
+                      <motion.div
+                        className="absolute inset-0 bg-gradient-to-r from-cyan-400/30 via-pink-400/30 to-purple-400/30"
+                        animate={{
+                          rotate: 360,
+                        }}
+                        transition={{
+                          duration: 3,
+                          repeat: Infinity,
+                          ease: "linear",
+                        }}
+                      />
+                    </>
+                  ) : (
+                    <Mic2 className="w-10 h-10" />
+                  )}
+                </Button>
+              </motion.div>
+              <p className="text-sm text-purple-200 font-medium">
+                {isGenerating ? "Generating..." : "Generate Audio"}
+              </p>
+            </motion.div>
+          )}
+
+          {/* Podcast Speakers Image (shown only when playing) */}
+          {isPlaying && isGenerated && (
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.3 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.5 }}
+              className="py-8"
             >
-              <Card className="bg-white/8 border border-white/15 backdrop-blur-sm overflow-hidden relative hover:bg-white/12 transition-all duration-300 cursor-pointer">
-                <div className="absolute inset-0 bg-gradient-to-r from-purple-500/5 to-pink-500/5 opacity-50" />
-                <CardContent className="p-6 relative">
-                  <div className="flex items-start gap-4">
-                    <div className="p-3 bg-gradient-to-br from-purple-500/20 to-pink-500/20 rounded-xl shadow-lg border border-purple-400/30">
-                      <FileAudio className="w-6 h-6 text-purple-300" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="mb-2 text-lg font-semibold text-white">Your Podcast</h3>
-                      <p className="text-base text-white/90 mb-4">{topic || "AI-Themed Podcast"}</p>
-                      <div className="flex flex-wrap gap-4 text-sm text-white/80">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-cyan-400" />
-                          <span className="font-medium">{script.split(/\s+/).filter(Boolean).length} words</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-pink-400" />
-                          <span className="font-medium">~{Math.ceil(script.split(/\s+/).filter(Boolean).length / 150)} min read</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+              <PodcastSpeakers 
+                hostGender={person1Gender}
+                isPlaying={isPlaying}
+                currentSpeaker={currentSpeaker}
+              />
             </motion.div>
           )}
 
-          {/* Generation Settings */}
-          <div className="space-y-5">
-            <div className="backdrop-blur-sm bg-white/5 p-5 rounded-xl border border-white/10">
-              <Label className="flex items-center gap-2 mb-3 text-purple-200">
-                <Volume2 className="w-4 h-4" />
-                Voice Style
-              </Label>
-              <Select value={voice} onValueChange={setVoice}>
-                <SelectTrigger className="bg-white/10 border-white/20 text-white backdrop-blur-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-gray-900 border-white/20 text-white">
-                  <SelectItem value="professional">Professional & Clear</SelectItem>
-                  <SelectItem value="casual">Casual & Friendly</SelectItem>
-                  <SelectItem value="energetic">Energetic & Dynamic</SelectItem>
-                  <SelectItem value="calm">Calm & Soothing</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          {/* Audio Element (hidden) */}
+          {audioUrl && (
+            <audio
+              ref={audioRef}
+              src={audioUrl}
+              preload="auto"
+              className="hidden"
+            />
+          )}
 
-            <div className="backdrop-blur-sm bg-white/5 p-5 rounded-xl border border-white/10">
-              <Label className="flex items-center gap-2 mb-3 text-purple-200">
-                <Music className="w-4 h-4" />
-                Music Style
-              </Label>
-              <Select value={musicStyle} onValueChange={setMusicStyle}>
-                <SelectTrigger className="bg-white/10 border-white/20 text-white backdrop-blur-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-gray-900 border-white/20 text-white">
-                  <SelectItem value="upbeat">Upbeat & Modern</SelectItem>
-                  <SelectItem value="ambient">Ambient & Atmospheric</SelectItem>
-                  <SelectItem value="minimal">Minimal & Clean</SelectItem>
-                  <SelectItem value="none">No Music</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <Separator className="bg-white/10" />
-
-            <div className="backdrop-blur-sm bg-white/5 p-5 rounded-xl border border-white/10 space-y-4">
-              <Label className="flex items-center gap-2 text-purple-200">
-                <Settings className="w-4 h-4" />
-                Additional Options
-              </Label>
-              
-              <div className="flex items-center space-x-3 p-3 rounded-lg hover:bg-white/5 transition-colors">
-                <Checkbox 
-                  id="intro" 
-                  checked={includeIntro}
-                  onCheckedChange={(checked) => setIncludeIntro(checked as boolean)}
-                  className="border-purple-300"
-                />
-                <label
-                  htmlFor="intro"
-                  className="text-sm leading-none text-purple-100 cursor-pointer flex-1"
-                >
-                  Include intro music and greeting
-                </label>
-              </div>
-
-              <div className="flex items-center space-x-3 p-3 rounded-lg hover:bg-white/5 transition-colors">
-                <Checkbox 
-                  id="outro" 
-                  checked={includeOutro}
-                  onCheckedChange={(checked) => setIncludeOutro(checked as boolean)}
-                  className="border-purple-300"
-                />
-                <label
-                  htmlFor="outro"
-                  className="text-sm leading-none text-purple-100 cursor-pointer flex-1"
-                >
-                  Include outro music and call-to-action
-                </label>
-              </div>
-            </div>
-          </div>
-
-          {/* Generate Button */}
-          <motion.div
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-          >
-            <Button 
-              onClick={handleGenerate}
-              disabled={isGenerating || !script}
-              className="w-full h-16 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 hover:from-blue-600 hover:via-purple-600 hover:to-pink-600 text-white border-0 shadow-2xl shadow-purple-500/50 disabled:opacity-50 text-lg font-semibold transition-all duration-300 relative overflow-hidden group disabled:hover:scale-100"
-            >
-              {/* Animated background effect */}
+          {/* Success Popup */}
+          <AnimatePresence>
+            {showSuccess && isGenerated && (
               <motion.div
-                className="absolute inset-0 bg-gradient-to-r from-pink-400/20 via-purple-400/20 to-blue-400/20"
-                animate={{
-                  x: ["-100%", "100%"],
-                }}
-                transition={{
-                  duration: 2,
-                  repeat: Infinity,
-                  repeatType: "loop",
-                  ease: "linear",
-                }}
-              />
-              <span className="flex items-center justify-center gap-3 relative z-10">
-                {isGenerating ? (
-                  <>
-                    <Sparkles className="w-5 h-5 animate-spin" />
-                    <span>Generating Preview...</span>
-                  </>
-                ) : (
-                  <>
-                    <motion.div
-                      animate={{
-                        rotate: [0, 360],
-                      }}
-                      transition={{
-                        duration: 2,
-                        repeat: Infinity,
-                        ease: "linear",
-                      }}
-                    >
-                      <Sparkles className="w-5 h-5" />
-                    </motion.div>
-                    <motion.span
-                      animate={{
-                        x: [0, 5, 0],
-                      }}
-                      transition={{
-                        duration: 1.5,
-                        repeat: Infinity,
-                        ease: "easeInOut",
-                      }}
-                    >
-                      Generate Preview Settings
-                    </motion.span>
-                  </>
-                )}
-              </span>
-            </Button>
-          </motion.div>
+                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                className="backdrop-blur-sm bg-gradient-to-r from-green-500/20 via-emerald-500/20 to-cyan-500/20 border-2 border-green-400/30 rounded-2xl p-8 text-center"
+              >
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
+                  className="flex justify-center mb-4"
+                >
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-green-400 rounded-full blur-xl opacity-50" />
+                    <CheckCircle2 className="w-16 h-16 text-green-400 relative" />
+                  </div>
+                </motion.div>
+                <h3 className="text-2xl font-bold text-white mb-2">Audio Generated Successfully!</h3>
+                <p className="text-purple-200/90 mb-6">
+                  Your podcast audio is ready. Click the button below to start listening.
+                </p>
+                <Button
+                  onClick={handleStartPodcast}
+                  className="bg-gradient-to-r from-green-500 via-emerald-500 to-cyan-500 hover:from-green-600 hover:via-emerald-600 hover:to-cyan-600 text-white border-0 shadow-xl shadow-green-500/50 text-lg font-semibold px-8 py-6"
+                >
+                  <Play className="w-5 h-5 mr-2" />
+                  Start Podcast
+                </Button>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-          {/* Success Message */}
+          {/* Play/Pause Controls at Bottom (shown after generation) */}
+          {isGenerated && !showSuccess && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex flex-col items-center gap-4 pt-4"
+            >
+              <Button
+                onClick={handlePlayPause}
+                className="w-20 h-20 rounded-full bg-gradient-to-br from-green-500 via-emerald-500 to-cyan-500 hover:from-green-600 hover:via-emerald-600 hover:to-cyan-600 text-white border-0 shadow-2xl shadow-green-500/50 font-semibold transition-all duration-300 relative overflow-hidden group"
+              >
+                <motion.div
+                  className="absolute inset-0 bg-gradient-to-r from-cyan-400/30 via-green-400/30 to-emerald-400/30"
+                  animate={{
+                    rotate: isPlaying ? 360 : 0,
+                  }}
+                  transition={{
+                    duration: 20,
+                    repeat: isPlaying ? Infinity : 0,
+                    ease: "linear",
+                  }}
+                />
+                {isPlaying ? (
+                  <Pause className="w-8 h-8 relative z-10" />
+                ) : (
+                  <Play className="w-8 h-8 ml-1 relative z-10" />
+                )}
+              </Button>
+              <p className="text-sm text-purple-200 font-medium">
+                {isPlaying ? "Playing" : "Paused"}
+              </p>
+            </motion.div>
+          )}
+
+          {/* Script Preview */}
+          {script && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="backdrop-blur-sm bg-white/5 p-6 rounded-xl border border-white/10"
+            >
+              <h3 className="text-lg font-semibold text-white mb-4">Your Podcast Script</h3>
+              <p className="text-sm text-purple-200/80 mb-2">
+                <span className="font-medium">Topic:</span> {topic || "No topic selected"}
+              </p>
+              <p className="text-sm text-purple-200/80">
+                <span className="font-medium">Length:</span> ~{Math.ceil(script.split(/\s+/).filter(Boolean).length / 150)} minutes
+              </p>
+            </motion.div>
+          )}
+
+          {/* Regenerate Button */}
           {isGenerated && (
             <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex justify-center"
             >
-              <Alert className="bg-gradient-to-r from-green-500/20 to-emerald-500/20 border-green-400/30 backdrop-blur-sm">
-                <CheckCircle2 className="w-4 h-4 text-green-400" />
-                <AlertDescription className="text-green-100">
-                  Your podcast settings are ready! Follow the export workflow below to create your final podcast using the AI tools.
-                </AlertDescription>
-              </Alert>
+              <Button
+                onClick={handleGenerate}
+                disabled={isGenerating}
+                variant="outline"
+                className="bg-white/5 hover:bg-white/10 border-white/20 text-white backdrop-blur-sm"
+              >
+                <Loader2 className={`w-4 h-4 mr-2 ${isGenerating ? "animate-spin" : ""}`} />
+                Regenerate Audio
+              </Button>
             </motion.div>
           )}
-
-          <Separator className="bg-white/10" />
-
-          {/* Export Workflow */}
-          <div className="space-y-4">
-            <h3 className="text-white">Production Workflow</h3>
-            <p className="text-sm text-purple-200/80">
-              Follow these steps to create your final podcast using the AI tools from the Starter Pack
-            </p>
-
-            <div className="space-y-3">
-              {exportInstructions.map((instruction, idx) => (
-                <motion.div
-                  key={idx}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: idx * 0.1 }}
-                >
-                  <Card className={`backdrop-blur-sm border-white/20 transition-all duration-300 hover:scale-105 hover:shadow-lg cursor-pointer ${
-                    instruction.status === "complete" 
-                      ? "bg-gradient-to-r from-green-500/15 to-emerald-500/15 border-green-400/30 hover:from-green-500/20 hover:to-emerald-500/20" 
-                      : "bg-white/8 hover:bg-white/12 border-white/15"
-                  }`}>
-                    <CardContent className="p-5">
-                      <div className="flex items-start gap-4">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm flex-shrink-0 transition-all duration-300 ${
-                          instruction.status === "complete" 
-                            ? "bg-gradient-to-br from-green-500 to-emerald-500 text-white shadow-lg shadow-green-500/50" 
-                            : "bg-white/10 text-purple-300 border border-white/20"
-                        }`}>
-                          {instruction.status === "complete" ? "✓" : idx + 1}
-                        </div>
-                        <div className="flex-1">
-                          <p className="mb-2 text-base font-semibold text-white">{instruction.step}</p>
-                          <p className="text-sm text-white/80">{instruction.tool}</p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-              ))}
-            </div>
-          </div>
-
-          {/* Download Script Button */}
-          <motion.div
-            whileHover={{ scale: 1.01 }}
-          >
-            <Card className="bg-white/8 border border-white/15 backdrop-blur-sm overflow-hidden relative hover:bg-white/12 transition-all duration-300 cursor-pointer">
-              <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 to-cyan-500/5 opacity-50" />
-              <CardContent className="p-6 relative">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex-1">
-                    <h3 className="mb-2 text-lg font-semibold text-white">Export Script</h3>
-                    <p className="text-base text-white/90">
-                      Download your script to use with AI voice generation tools
-                    </p>
-                  </div>
-                  <Button 
-                    onClick={() => {
-                      const blob = new Blob([script], { type: "text/plain" });
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement("a");
-                      a.href = url;
-                      a.download = `podcast-script-${Date.now()}.txt`;
-                      a.click();
-                      toast.success("Script downloaded!");
-                    }}
-                    disabled={!script}
-                    className="bg-gradient-to-r from-blue-500/20 to-cyan-500/20 hover:from-blue-500/30 hover:to-cyan-500/30 border border-blue-400/30 text-white backdrop-blur-sm transition-all duration-300 hover:scale-105"
-                  >
-                    <Download className="w-4 h-4 mr-2" />
-                    Download
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
         </CardContent>
       </Card>
     </motion.div>

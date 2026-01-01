@@ -1,7 +1,7 @@
 {
-  "name": "ai-podcast-generator",
+  "name": "voxgen-ai-podcast-studio",
   "version": "1.0.0",
-  "description": "AI-powered podcast creation tool with beautiful UI",
+  "description": "VoxGen - AI Podcast Studio: Create stunning podcasts with the power of AI",
   "type": "module",
   "scripts": {
     "dev": "vite",

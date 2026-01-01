@@ -3,15 +3,10 @@ import { motion } from "framer-motion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { TopicSelector } from "./TopicSelector";
 import { ScriptEditor } from "./ScriptEditor";
-import { StarterPack } from "./StarterPack";
 import { PodcastGenerator } from "./PodcastGenerator";
-import { Mic2, FileText, Sparkles, Rocket, Radio } from "lucide-react";
+import { Mic2, FileText, Sparkles, Radio } from "lucide-react";
 
-interface PodcastAssistantProps {
-  onTherapistNavigate?: () => void;
-}
-
-export function PodcastAssistant({ onTherapistNavigate }: PodcastAssistantProps) {
+export function PodcastAssistant() {
   const [activeTab, setActiveTab] = useState("topic");
   const [selectedTopic, setSelectedTopic] = useState("");
   const [script, setScript] = useState("");
@@ -19,9 +14,10 @@ export function PodcastAssistant({ onTherapistNavigate }: PodcastAssistantProps)
   // Calculate progress based on completion
   const calculateProgress = () => {
     let progress = 0;
-    if (selectedTopic) progress += 25;
-    if (script.length > 100) progress += 25;
-    return progress;
+    if (selectedTopic) progress += 50;
+    if (script.length > 100) progress += 50;
+    // When script is generated, show 100% progress
+    return Math.min(progress, 100);
   };
 
   return (
@@ -54,7 +50,7 @@ export function PodcastAssistant({ onTherapistNavigate }: PodcastAssistantProps)
           animate={{ opacity: 1 }}
           transition={{ delay: 0.3, duration: 0.6 }}
         >
-          AI Podcast Studio
+          VoxGen - AI Podcast Studio
         </motion.h1>
         
         <motion.p 
@@ -97,7 +93,7 @@ export function PodcastAssistant({ onTherapistNavigate }: PodcastAssistantProps)
         transition={{ delay: 0.6, duration: 0.6 }}
       >
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-4 mb-8 bg-white/5 backdrop-blur-xl border border-white/10 p-2 rounded-2xl h-auto">
+          <TabsList className="grid w-full grid-cols-3 mb-8 bg-white/5 backdrop-blur-xl border border-white/10 p-2 rounded-2xl h-auto">
             <TabsTrigger 
               value="topic" 
               className="flex items-center gap-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-pink-500 data-[state=active]:text-white rounded-xl py-3 text-purple-200 transition-all"
@@ -113,15 +109,8 @@ export function PodcastAssistant({ onTherapistNavigate }: PodcastAssistantProps)
               <span className="hidden sm:inline">Script</span>
             </TabsTrigger>
             <TabsTrigger 
-              value="tools" 
-              className="flex items-center gap-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500 data-[state=active]:to-blue-500 data-[state=active]:text-white rounded-xl py-3 text-purple-200 transition-all"
-            >
-              <Rocket className="w-4 h-4" />
-              <span className="hidden sm:inline">Tools</span>
-            </TabsTrigger>
-            <TabsTrigger 
               value="generate" 
-              className="flex items-center gap-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-purple-500 data-[state=active]:text-white rounded-xl py-3 text-purple-200 transition-all"
+              className="flex items-center gap-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-cyan-500 data-[state=active]:to-purple-500 data-[state=active]:text-white rounded-xl py-3 text-purple-200 transition-all"
             >
               <Mic2 className="w-4 h-4" />
               <span className="hidden sm:inline">Generate</span>
@@ -133,7 +122,6 @@ export function PodcastAssistant({ onTherapistNavigate }: PodcastAssistantProps)
               selectedTopic={selectedTopic}
               setSelectedTopic={setSelectedTopic}
               onNext={() => setActiveTab("script")}
-              onOpenTherapist={onTherapistNavigate}
             />
           </TabsContent>
 
@@ -142,12 +130,8 @@ export function PodcastAssistant({ onTherapistNavigate }: PodcastAssistantProps)
               script={script}
               setScript={setScript}
               topic={selectedTopic}
-              onNext={() => setActiveTab("tools")}
+              onNext={() => setActiveTab("generate")}
             />
-          </TabsContent>
-
-          <TabsContent value="tools" className="mt-0">
-            <StarterPack onNext={() => setActiveTab("generate")} />
           </TabsContent>
 
           <TabsContent value="generate" className="mt-0">

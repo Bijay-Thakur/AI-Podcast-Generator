@@ -1,15 +1,8 @@
-import { useState } from "react";
 import { PodcastAssistant } from "./components/PodcastAssistant";
 import { SoundWaves } from "./components/SoundWaves";
-import { TherapistSupport } from "./components/TherapistSupport";
 import { Toaster } from "./components/ui/sonner";
 
 export default function App() {
-  const [view, setView] = useState<"studio" | "therapist">("studio");
-
-  const showStudio = () => setView("studio");
-  const showTherapist = () => setView("therapist");
-
   return (
     <div className="min-h-screen relative overflow-hidden">
       {/* Animated gradient background */}
@@ -27,13 +20,9 @@ export default function App() {
       {/* Grid overlay */}
       <div className="fixed inset-0 bg-[linear-gradient(rgba(255,255,255,.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.02)_1px,transparent_1px)] bg-[size:100px_100px] [mask-image:radial-gradient(ellipse_80%_80%_at_50%_50%,black,transparent)]" />
       
-      {/* Main content / page routing */}
+      {/* Main content */}
       <div className="relative z-10">
-        {view === "studio" ? (
-          <PodcastAssistant onTherapistNavigate={showTherapist} />
-        ) : (
-          <TherapistSupport onBack={showStudio} />
-        )}
+        <PodcastAssistant />
       </div>
       
       <Toaster />

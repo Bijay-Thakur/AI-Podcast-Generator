@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { motion } from "framer-motion";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
@@ -12,12 +12,12 @@ interface TopicSelectorProps {
   selectedTopic: string;
   setSelectedTopic: (topic: string) => void;
   onNext: () => void;
-  onOpenTherapist?: () => void;
 }
 
-export function TopicSelector({ selectedTopic, setSelectedTopic, onNext, onOpenTherapist }: TopicSelectorProps) {
+export function TopicSelector({ selectedTopic, setSelectedTopic, onNext }: TopicSelectorProps) {
   const [topicMode, setTopicMode] = useState<"preset" | "custom">("preset");
   const [customTopic, setCustomTopic] = useState("");
+  const clickTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const presetTopics = [
     {
@@ -55,8 +55,26 @@ export function TopicSelector({ selectedTopic, setSelectedTopic, onNext, onOpenT
   ];
 
   const handlePresetSelect = (topic: any) => {
-    setSelectedTopic(topic.title + ": " + topic.description);
+    const topicString = topic.title + ": " + topic.description;
+    setSelectedTopic(topicString);
     setTopicMode("preset");
+  };
+
+  const handleCardClick = (topic: any) => {
+    // Clear any pending timeout (double-click detected)
+    if (clickTimeoutRef.current) {
+      clearTimeout(clickTimeoutRef.current);
+      clickTimeoutRef.current = null;
+      // Double click - unselect
+      setSelectedTopic("");
+      return;
+    }
+
+    // Single click - delay to detect double-click
+    clickTimeoutRef.current = setTimeout(() => {
+      handlePresetSelect(topic);
+      clickTimeoutRef.current = null;
+    }, 250);
   };
 
   const handleNext = () => {
@@ -146,39 +164,6 @@ export function TopicSelector({ selectedTopic, setSelectedTopic, onNext, onOpenT
                 )}
               </div>
             </RadioGroup>
-            {onOpenTherapist && (
-              <motion.button
-                type="button"
-                onClick={onOpenTherapist}
-                whileHover={{ scale: 1.01, y: -2 }}
-                whileTap={{ scale: 0.99 }}
-                className="mt-5 w-full flex flex-col md:flex-row items-start md:items-center gap-4 p-5 rounded-2xl border-2 border-fuchsia-400/40 bg-gradient-to-r from-fuchsia-600/40 via-purple-600/40 to-cyan-500/40 shadow-[0_20px_60px_-15px_rgba(195,65,255,0.6)] backdrop-blur-xl transition-all duration-500"
-              >
-                <div className="flex-1">
-                  <p className="text-white text-lg font-semibold flex items-center gap-2">
-                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white/20">
-                      <Zap className="w-4 h-4 text-white" />
-                    </span>
-                    Talk with a therapist
-                  </p>
-                  <p className="text-sm text-white/80 mt-1">
-                    Feeling overwhelmed? Connect with a certified wellness guide for a calming chat or a focused call.
-                  </p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="px-4 py-2 rounded-full bg-white/20 text-white text-sm font-medium tracking-wide">
-                    Chat or Call
-                  </div>
-                  <motion.div
-                    animate={{ x: [0, 6, 0] }}
-                    transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
-                    className="flex items-center justify-center h-12 w-12 rounded-full bg-white/30 text-purple-900"
-                  >
-                    <ArrowRight className="w-5 h-5" />
-                  </motion.div>
-                </div>
-              </motion.button>
-            )}
           </div>
 
           {/* Preset Topics */}
@@ -202,12 +187,12 @@ export function TopicSelector({ selectedTopic, setSelectedTopic, onNext, onOpenT
                     whileTap={{ scale: 0.98 }}
                   >
                     <Card
-                      className={`cursor-pointer transition-all h-full backdrop-blur-sm border-white/20 hover:border-white/40 ${
+                      className={`cursor-pointer transition-all h-full backdrop-blur-sm ${
                         isSelected 
-                          ? `bg-gradient-to-br ${topic.bgGradient} border-2 border-white/30 shadow-lg shadow-purple-500/25` 
-                          : "bg-white/5 hover:bg-white/10"
+                          ? `bg-white/5 border-2 ${topic.gradient === "from-purple-500 to-pink-500" ? "border-purple-400 shadow-[0_0_20px_rgba(168,85,247,0.6),0_0_40px_rgba(236,72,153,0.4)]" : topic.gradient === "from-pink-500 to-rose-500" ? "border-pink-400 shadow-[0_0_20px_rgba(236,72,153,0.6),0_0_40px_rgba(244,63,94,0.4)]" : topic.gradient === "from-cyan-500 to-blue-500" ? "border-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.6),0_0_40px_rgba(59,130,246,0.4)]" : "border-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.6),0_0_40px_rgba(249,115,22,0.4)]"}` 
+                          : "bg-white/5 border border-white/20 hover:border-white/40 hover:bg-white/10"
                       }`}
-                      onClick={() => handlePresetSelect(topic)}
+                      onClick={() => handleCardClick(topic)}
                     >
                       <CardContent className="p-5">
                         <div className="flex items-start gap-4">
@@ -279,8 +264,8 @@ export function TopicSelector({ selectedTopic, setSelectedTopic, onNext, onOpenT
             </motion.div>
           )}
 
-          {/* Selected Topic Display */}
-          {selectedTopic && (
+          {/* Selected Topic Display - Only show in preset mode */}
+          {selectedTopic && topicMode === "preset" && (
             <motion.div 
               className="p-4 bg-gradient-to-r from-green-500/20 to-emerald-500/20 border border-green-400/30 rounded-xl backdrop-blur-sm"
               initial={{ opacity: 0, scale: 0.9 }}
